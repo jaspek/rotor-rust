@@ -1,10 +1,10 @@
 FROM ubuntu:24.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc g++ cmake make git ca-certificates \
+    gcc g++ cmake make git ca-certificates python3 curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Build btor2tools (includes btormc)
+# Build btor2tools (includes catbtor, btorsim)
 RUN git clone --depth 1 https://github.com/Boolector/btor2tools.git /btor2tools && \
     cd /btor2tools && \
     mkdir build && cd build && \
@@ -12,6 +12,14 @@ RUN git clone --depth 1 https://github.com/Boolector/btor2tools.git /btor2tools 
     cp bin/catbtor /usr/local/bin/ && \
     cp bin/btorsim /usr/local/bin/
 
-# Copy benchmark files in at runtime via volume mount
+# Build Boolector (includes btormc)
+RUN git clone --recursive https://github.com/Boolector/boolector.git /boolector && \
+    cd /boolector && \
+    ./contrib/setup-lingeling.sh && \
+    ./contrib/setup-btor2tools.sh && \
+    ./configure.sh && \
+    cd build && make -j$(nproc) && \
+    cp bin/btormc /usr/local/bin/
+
 WORKDIR /benchmarks
 ENTRYPOINT ["/bin/bash"]

@@ -1,24 +1,27 @@
-// Test 5: Bug triggers when a simple checksum of argv[1] equals a magic value.
-// Computes: sum = argv[1][0] + argv[1][1] + argv[1][2] + argv[1][3]
-// Crashes when sum == 400 (e.g. 'd'(100) + 'd'(100) + 'd'(100) + 'd'(100)).
-// This tests that the solver can reason about arithmetic over symbolic bytes.
-// CANNOT be found via symbolic stdin alone (program never reads stdin).
+// Test 5: Bug triggers when sum of first two bytes of argv[1] equals 200.
+// Written in C* (selfie subset): only uint64_t types, pointer arithmetic.
+// E.g. byte0 = 100, byte1 = 100 -> sum = 200 -> bad exit.
+// Compile: selfie -c test5_checksum.c -m 1
+// Rotor:   rotor test5_checksum.m --symbolic-argv --symbolic-argc 1 --max-arglen 8
 
-int main(int argc, char* argv[]) {
-    if (argc < 2) return 0;
+uint64_t main(uint64_t argc, uint64_t* argv) {
+    uint64_t* arg1;
+    uint64_t word;
+    uint64_t byte0;
+    uint64_t byte1;
+    uint64_t sum;
 
-    char* s = argv[1];
+    if (argc > 1) {
+        arg1 = (uint64_t*) *(argv + 1);
+        word = *arg1;
+        byte0 = word - (word / 256) * 256;
+        byte1 = (word / 256) - ((word / 256) / 256) * 256;
 
-    // Need at least 4 characters
-    if (s[0] == 0) return 0;
-    if (s[1] == 0) return 0;
-    if (s[2] == 0) return 0;
-    if (s[3] == 0) return 0;
+        sum = byte0 + byte1;
 
-    int sum = (int)s[0] + (int)s[1] + (int)s[2] + (int)s[3];
-
-    if (sum == 400)
-        return 1; // bad exit code
+        if (sum == 200)
+            return 1;
+    }
 
     return 0;
 }

@@ -307,11 +307,11 @@ impl CoreState {
         let pointer_area_start = string_area_start - pointer_area_size;
         let sp = pointer_area_start - word_size; // argc lives at SP
 
-        // Start building the stack array
-        let stack_seg = builder.input(
+        // Start building the stack array (use state, not input — BTOR2 forbids inputs in init)
+        let stack_seg = builder.state(
             sorts.sid_stack_state,
-            "initial-stack",
-            Some("uninitialized stack segment".to_string()),
+            "initial-stack-base",
+            Some("base stack segment for argv initialization".to_string()),
         );
         let mut current = stack_seg;
 
@@ -345,8 +345,10 @@ impl CoreState {
                 addrs.push(str_addr);
                 for byte_idx in 0..max_arglen {
                     let addr = builder.constd(sorts.sid_stack_address, str_addr, None);
-                    // Each byte is a symbolic input — the solver can choose any value 0-255
-                    let sym_byte = builder.input(
+                    // Each byte is a symbolic (unconstrained) state — the solver can choose any value 0-255.
+                    // We use state (not input) because BTOR2 forbids inputs in init expressions.
+                    // An uninitialized state is unconstrained, which is exactly what we want.
+                    let sym_byte = builder.state(
                         sorts.sid_byte,
                         &format!("argv[{}][{}]", arg_idx + 1, byte_idx),
                         Some(format!("symbolic byte argv[{}][{}]", arg_idx + 1, byte_idx)),
