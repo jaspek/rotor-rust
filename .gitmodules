@@ -1,0 +1,3 @@
+[submodule "agent-bitr"]
+	path = agent-bitr
+	url = https://github.com/cksystemsgroup/agent-bitr.git

@@ -42,6 +42,11 @@ pub struct Config {
     pub check_division_by_zero: bool,
     pub check_division_overflow: bool,
     pub check_seg_faults: bool,
+    // symbolic argv
+    pub symbolic_argv: bool,
+    pub symbolic_argc: usize,
+    pub max_arglen: usize,
+
     // output
     pub print_comments: bool,
     pub propagate_constants: bool,
@@ -60,6 +65,9 @@ impl Default for Config {
             heap_allowance: 4096,
             stack_allowance: 4096,
             bytes_to_read: 4,
+            symbolic_argv: false,
+            symbolic_argc: 0,
+            max_arglen: 8,
             check_bad_exit_code: true,
             check_good_exit_code: false,
             check_exit_codes: false,

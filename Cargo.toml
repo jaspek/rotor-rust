@@ -1,11 +1,5 @@
-[package]
-name = "rotor"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-goblin = "0.9"
-clap = { version = "4", features = ["derive"] }
-thiserror = "2"
-log = "0.4"
-env_logger = "0.11"
+[workspace]
+members = [
+    "rotor",
+]
+resolver = "3"
