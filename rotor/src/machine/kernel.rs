@@ -25,16 +25,24 @@ impl KernelState {
         initial_brk: u64,
         bytes_to_read: u64,
     ) -> Self {
-        // Program break state
-        let program_break = builder.state(
-            sorts.sid_machine_word,
-            "program-break",
-            Some("program break state".to_string()),
-        );
+        // Create init values first (BTOR2 requires state nid > value nid)
         let initial_brk_nid = builder.constd(
             sorts.sid_machine_word,
             initial_brk,
             Some("initial program break".to_string()),
+        );
+        let init_readable = builder.constd(
+            sorts.sid_machine_word,
+            bytes_to_read,
+            Some(format!("{} bytes to read", bytes_to_read)),
+        );
+        // read_bytes uses consts.nid_machine_word_0 which is already created
+
+        // Now create states
+        let program_break = builder.state(
+            sorts.sid_machine_word,
+            "program-break",
+            Some("program break state".to_string()),
         );
         let _program_break_init = builder.init(
             sorts.sid_machine_word,
@@ -43,23 +51,16 @@ impl KernelState {
             Some("init program break".to_string()),
         );
 
-        // Input buffer (symbolic - represents stdin)
         let input_buffer = builder.state(
             sorts.sid_input_buffer,
             "input-buffer",
             Some("symbolic input buffer".to_string()),
         );
 
-        // Readable bytes
         let readable_bytes = builder.state(
             sorts.sid_machine_word,
             "readable-bytes",
             Some("readable bytes remaining".to_string()),
-        );
-        let init_readable = builder.constd(
-            sorts.sid_machine_word,
-            bytes_to_read,
-            Some(format!("{} bytes to read", bytes_to_read)),
         );
         let _readable_init = builder.init(
             sorts.sid_machine_word,
@@ -68,7 +69,6 @@ impl KernelState {
             Some("init readable bytes".to_string()),
         );
 
-        // Read bytes counter
         let read_bytes = builder.state(
             sorts.sid_machine_word,
             "read-bytes",

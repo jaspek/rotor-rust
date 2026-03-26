@@ -1,7 +1,7 @@
 use std::io::{self, Write};
 
 use super::builder::Btor2Builder;
-use super::node::{Node, Op};
+use super::node::{Node, NodeId, Op};
 use super::sort::Sort;
 
 pub struct Btor2Printer {
@@ -14,25 +14,80 @@ impl Btor2Printer {
     }
 
     pub fn print(&self, builder: &Btor2Builder, out: &mut dyn Write) -> io::Result<()> {
-        // Assign nids sequentially in arena order
-        // (nodes are already in topological order by construction)
-        let mut nid_map: Vec<u32> = vec![0; builder.node_count() + 1];
-        let mut next_nid: u32 = 1;
+        let count = builder.node_count();
 
+        // Simple arena-order output, but we need to satisfy BTOR2's constraint:
+        // For `init S STATE VALUE`, STATE nid > VALUE nid (and all VALUE deps).
+        //
+        // Strategy: output nodes in arena order (which is mostly topological due to
+        // CSE), but for each init node, ensure the state appears after the value
+        // by collecting (state, max_value_nid) pairs and relocating states as needed.
+
+        // Phase 1: Collect init constraints
+        // For each init, find the maximum nid in the value's dependency tree
+        let mut state_must_follow: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
         for node in builder.nodes() {
-            nid_map[node.id.index()] = next_nid;
+            if let Op::Init { state, value, .. } = &node.op {
+                // The state must appear after value (and all of value's deps)
+                // In arena order, value and its deps have arena indices.
+                // We just need state's position > value's position in the output.
+                state_must_follow.insert(state.index(), value.index());
+            }
+        }
+
+        // Phase 2: Build output order.
+        // Start with arena order. For states that must follow their init values,
+        // move the state to just before its init node.
+        let arena_order: Vec<usize> = builder.nodes().iter().map(|n| n.id.index()).collect();
+
+        // Find position of each node in arena order
+        let mut pos_of: Vec<usize> = vec![0; count + 1];
+        for (pos, &idx) in arena_order.iter().enumerate() {
+            pos_of[idx] = pos;
+        }
+
+        // Check which states need relocation
+        let mut relocate: std::collections::HashSet<usize> = std::collections::HashSet::new();
+        for (&state_idx, &value_idx) in &state_must_follow {
+            if pos_of[state_idx] < pos_of[value_idx] {
+                relocate.insert(state_idx);
+            }
+        }
+
+        // Build final order: skip relocated states, insert them just before their init
+        let mut final_order: Vec<usize> = Vec::with_capacity(count);
+        for &idx in &arena_order {
+            if relocate.contains(&idx) {
+                continue; // Will be inserted before its init
+            }
+            let node = builder.node_by_index(idx);
+            if let Op::Init { state, .. } = &node.op {
+                if relocate.contains(&state.index()) {
+                    final_order.push(state.index()); // Insert state just before init
+                }
+            }
+            final_order.push(idx);
+        }
+
+        // Assign sequential nids
+        let mut nid_map: Vec<u32> = vec![0; count + 1];
+        let mut next_nid: u32 = 1;
+        for &idx in &final_order {
+            nid_map[idx] = next_nid;
             next_nid += 1;
         }
 
-        for node in builder.nodes() {
-            let nid = nid_map[node.id.index()];
+        // Print
+        for &idx in &final_order {
+            let node = builder.node_by_index(idx);
+            let nid = nid_map[idx];
             self.print_node(node, nid, &nid_map, out)?;
         }
 
         Ok(())
     }
 
-    fn nid_of(nid_map: &[u32], id: super::node::NodeId) -> u32 {
+    fn nid_of(nid_map: &[u32], id: NodeId) -> u32 {
         nid_map[id.index()]
     }
 

@@ -19,10 +19,6 @@ impl Memory {
         vaddr: NodeId,
         comment: impl Into<Option<String>>,
     ) -> NodeId {
-        // Truncate machine-word address to memory address width
-        let addr = builder.slice(sorts.sid_data_address, vaddr, sorts.sid_data_address.raw() - 1, 0, None);
-        let _ = addr;
-        // Actually, we use machine word directly as index if widths match
         builder.read(sorts.sid_byte, memory, vaddr, comment)
     }
 

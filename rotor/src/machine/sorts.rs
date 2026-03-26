@@ -114,32 +114,30 @@ impl MachineSorts {
             Some("register file [5-bit -> machine word]".to_string()),
         );
 
-        // Code segment
-        let code_addr_bits = config.virtual_address_space;
+        // Code segment — indexed by machine word (same width as PC)
         let sid_code_word = sid_single_word; // Instructions are always 32-bit
-        let sid_code_address = builder.bitvec(code_addr_bits, Some("code address".to_string()));
+        let sid_code_address = sid_machine_word; // Use machine word for addressing
         let sid_code_state = builder.array(
             sid_code_address,
             sid_code_word,
             Some("code segment [addr -> 32-bit instruction]".to_string()),
         );
 
-        // Memory segments (byte-addressable)
-        let mem_addr_bits = config.virtual_address_space;
+        // Memory segments (byte-addressable, indexed by machine word)
         let sid_memory_word = sid_byte;
-        let sid_data_address = builder.bitvec(mem_addr_bits, Some("data segment address".to_string()));
+        let sid_data_address = sid_machine_word;
         let sid_data_state = builder.array(
             sid_data_address,
             sid_memory_word,
             Some("data segment [addr -> byte]".to_string()),
         );
-        let sid_heap_address = builder.bitvec(mem_addr_bits, Some("heap segment address".to_string()));
+        let sid_heap_address = sid_machine_word;
         let sid_heap_state = builder.array(
             sid_heap_address,
             sid_memory_word,
             Some("heap segment [addr -> byte]".to_string()),
         );
-        let sid_stack_address = builder.bitvec(mem_addr_bits, Some("stack segment address".to_string()));
+        let sid_stack_address = sid_machine_word;
         let sid_stack_state = builder.array(
             sid_stack_address,
             sid_memory_word,
@@ -147,8 +145,7 @@ impl MachineSorts {
         );
 
         // Input buffer
-        let input_addr_bits = 32; // sufficient for input buffer addressing
-        let sid_input_address = builder.bitvec(input_addr_bits, Some("input buffer address".to_string()));
+        let sid_input_address = sid_machine_word;
         let sid_input_buffer = builder.array(
             sid_input_address,
             sid_byte,

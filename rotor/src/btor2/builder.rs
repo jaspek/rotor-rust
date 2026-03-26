@@ -648,6 +648,11 @@ impl Btor2Builder {
     pub fn node_count(&self) -> usize {
         self.nodes.len()
     }
+
+    /// Get a node by its arena index (1-based, matching NodeId::index()).
+    pub fn node_by_index(&self, index: usize) -> &Node {
+        &self.nodes[index - 1]
+    }
 }
 
 #[cfg(test)]

@@ -44,6 +44,10 @@ pub struct CoreState {
 
 impl CoreState {
     /// Create and initialize all state for one core.
+    ///
+    /// BTOR2 ordering constraint: for `init S STATE VALUE`, STATE nid > VALUE nid.
+    /// Strategy: build all init value chains (using base states for arrays) BEFORE
+    /// creating the real states, so real states naturally get higher nids.
     pub fn new(
         builder: &mut Btor2Builder,
         sorts: &MachineSorts,
@@ -60,74 +64,27 @@ impl CoreState {
 
         let word_size = config.machine_word_bytes() as u64; // 4 or 8
 
-        // Program counter
-        let pc_state = builder.state(
-            sorts.sid_machine_word,
-            &format!("{}pc", prefix),
-            Some("program counter".to_string()),
-        );
+        // ================================================================
+        // Phase 1: Build ALL init value chains BEFORE creating real states.
+        // Each array init chain uses a base state as the write target.
+        // BTOR2 requires state nid > value nid for init, so real states
+        // must be created after their init value chains.
+        // ================================================================
+
+        // --- Code segment init value (base state + writes from binary) ---
+        let code_init_val = Self::initialize_code_segment(builder, sorts, consts, binary);
+
+        // --- Data segment init value (base state + writes from binary) ---
+        let data_init_val = Self::initialize_data_segment(builder, sorts, binary);
+
+        // --- PC init value ---
         let entry = builder.constd(
             sorts.sid_machine_word,
             binary.entry_point,
             Some(format!("entry point 0x{:x}", binary.entry_point)),
         );
-        let _pc_init = builder.init(
-            sorts.sid_machine_word,
-            pc_state,
-            entry,
-            Some("init PC to entry point".to_string()),
-        );
 
-        // Register file
-        let register_file_state = builder.state(
-            sorts.sid_register_state,
-            &format!("{}register-file", prefix),
-            Some("register file state".to_string()),
-        );
-
-        // Code segment (initialized from binary)
-        let code_segment_state = builder.state(
-            sorts.sid_code_state,
-            &format!("{}code-segment", prefix),
-            Some("code segment (read-only)".to_string()),
-        );
-        let code_init_val = Self::initialize_code_segment(builder, sorts, consts, binary);
-        let _code_init = builder.init(
-            sorts.sid_code_state,
-            code_segment_state,
-            code_init_val,
-            Some("init code segment from binary".to_string()),
-        );
-
-        // Data segment
-        let data_segment_state = builder.state(
-            sorts.sid_data_state,
-            &format!("{}data-segment", prefix),
-            Some("data segment".to_string()),
-        );
-        let data_init_val = Self::initialize_data_segment(builder, sorts, binary);
-        let _data_init = builder.init(
-            sorts.sid_data_state,
-            data_segment_state,
-            data_init_val,
-            Some("init data segment from binary".to_string()),
-        );
-
-        // Heap segment (initially empty)
-        let heap_segment_state = builder.state(
-            sorts.sid_heap_state,
-            &format!("{}heap-segment", prefix),
-            Some("heap segment".to_string()),
-        );
-
-        // Stack segment
-        let stack_segment_state = builder.state(
-            sorts.sid_stack_state,
-            &format!("{}stack-segment", prefix),
-            Some("stack segment".to_string()),
-        );
-
-        // Segmentation
+        // --- Segmentation constants (needed for SP calculation) ---
         let segmentation = Segmentation::new(
             builder,
             sorts,
@@ -137,29 +94,10 @@ impl CoreState {
             config.stack_allowance,
         );
 
-        // ================================================================
-        // Compute initial SP and initialize the stack with argv layout
-        // ================================================================
-        //
-        // RISC-V ABI stack layout (grows downward, high -> low address):
-        //
-        //   stack_end (high address)
-        //     argv[N-1] string bytes + \0
-        //     ...
-        //     argv[0] string bytes + \0
-        //     [alignment padding to word boundary]
-        //     NULL terminator (pointer = 0)
-        //     argv[N-1] pointer
-        //     ...
-        //     argv[0] pointer
-        //     argc                              <-- SP points here
-        //   (lower address)
-        //
-
+        // --- Stack init value (symbolic argv writes on a base input/state) ---
         let vaddr_top = 1u64 << (config.virtual_address_space - 1);
 
         let (initial_sp, stack_init_val) = if config.symbolic_argv && config.symbolic_argc > 0 {
-            // Symbolic argv mode
             Self::initialize_symbolic_argv(
                 builder,
                 sorts,
@@ -168,22 +106,18 @@ impl CoreState {
                 word_size,
             )
         } else {
-            // No argv — SP at top of stack, no stack content
             let sp = vaddr_top - word_size;
             (sp, None)
         };
 
-        // Initialize stack segment if we have argv data
-        if let Some(stack_val) = stack_init_val {
-            let _stack_init = builder.init(
-                sorts.sid_stack_state,
-                stack_segment_state,
-                stack_val,
-                Some("init stack segment with argv".to_string()),
-            );
-        }
+        // --- Register file init value (base state + writes for SP, a0, x0) ---
+        // Use a base state as the write target (like C rotor's "zeroed register file")
+        let base_regs = builder.state(
+            sorts.sid_register_state,
+            &format!("{}base-register-file", prefix),
+            Some("base register file for initialization".to_string()),
+        );
 
-        // Initialize register file: SP and x0
         let sp_val = builder.constd(
             sorts.sid_machine_word,
             initial_sp,
@@ -192,18 +126,17 @@ impl CoreState {
         let sp_addr = consts.nid_register(crate::riscv::isa::regs::SP);
         let reg_with_sp = builder.write(
             sorts.sid_register_state,
-            register_file_state,
+            base_regs,
             sp_addr,
             sp_val,
             Some("set initial SP".to_string()),
         );
 
-        // Also set a0 = argc when symbolic argv is enabled
+        // Set a0 = argc when symbolic argv is enabled
         let reg_after_argc = if config.symbolic_argv && config.symbolic_argc > 0 {
-            // a0 = argc (standard RISC-V ABI: argc in a0 at _start)
             let argc_val = builder.constd(
                 sorts.sid_machine_word,
-                (config.symbolic_argc + 1) as u64, // +1 for program name (argv[0])
+                (config.symbolic_argc + 1) as u64,
                 Some(format!("argc = {}", config.symbolic_argc + 1)),
             );
             let a0_addr = consts.nid_register(crate::riscv::isa::regs::A0);
@@ -221,7 +154,7 @@ impl CoreState {
         // Set x0 = 0 explicitly
         let zero_val = consts.nid_machine_word_0;
         let x0_addr = consts.nid_register(crate::riscv::isa::regs::ZR);
-        let initial_regs = builder.write(
+        let reg_init_val = builder.write(
             sorts.sid_register_state,
             reg_after_argc,
             x0_addr,
@@ -229,14 +162,86 @@ impl CoreState {
             Some("x0 = 0".to_string()),
         );
 
+        // ================================================================
+        // Phase 2: Create real states and init them.
+        // All states created here get higher nids than their init values.
+        // ================================================================
+
+        // --- PC ---
+        let pc_state = builder.state(
+            sorts.sid_machine_word,
+            &format!("{}pc", prefix),
+            Some("program counter".to_string()),
+        );
+        let _pc_init = builder.init(
+            sorts.sid_machine_word,
+            pc_state,
+            entry,
+            Some("init PC to entry point".to_string()),
+        );
+
+        // --- Code segment ---
+        let code_segment_state = builder.state(
+            sorts.sid_code_state,
+            &format!("{}code-segment", prefix),
+            Some("code segment (read-only)".to_string()),
+        );
+        let _code_init = builder.init(
+            sorts.sid_code_state,
+            code_segment_state,
+            code_init_val,
+            Some("init code segment from binary".to_string()),
+        );
+
+        // --- Data segment ---
+        let data_segment_state = builder.state(
+            sorts.sid_data_state,
+            &format!("{}data-segment", prefix),
+            Some("data segment".to_string()),
+        );
+        let _data_init = builder.init(
+            sorts.sid_data_state,
+            data_segment_state,
+            data_init_val,
+            Some("init data segment from binary".to_string()),
+        );
+
+        // --- Heap segment (no init — symbolic) ---
+        let heap_segment_state = builder.state(
+            sorts.sid_heap_state,
+            &format!("{}heap-segment", prefix),
+            Some("heap segment".to_string()),
+        );
+
+        // --- Stack segment ---
+        let stack_segment_state = builder.state(
+            sorts.sid_stack_state,
+            &format!("{}stack-segment", prefix),
+            Some("stack segment".to_string()),
+        );
+        if let Some(stack_val) = stack_init_val {
+            let _stack_init = builder.init(
+                sorts.sid_stack_state,
+                stack_segment_state,
+                stack_val,
+                Some("init stack segment with argv".to_string()),
+            );
+        }
+
+        // --- Register file ---
+        let register_file_state = builder.state(
+            sorts.sid_register_state,
+            &format!("{}register-file", prefix),
+            Some("register file state".to_string()),
+        );
         let _reg_init = builder.init(
             sorts.sid_register_state,
             register_file_state,
-            initial_regs,
+            reg_init_val,
             Some("init register file".to_string()),
         );
 
-        // Kernel state
+        // --- Kernel state ---
         let initial_brk = binary.data_start + binary.data_size;
         let kernel = KernelState::new(builder, sorts, consts, initial_brk, config.bytes_to_read);
 
@@ -425,11 +430,12 @@ impl CoreState {
         _consts: &MachineConstants,
         binary: &LoadedBinary,
     ) -> NodeId {
-        // Start with an input (uninitialized) code segment
-        let code_seg = builder.input(
+        // Start with an anonymous state as base for the code segment init chain.
+        // (BTOR2 does not allow 'input' in init expressions)
+        let code_seg = builder.state(
             sorts.sid_code_state,
-            "initial-code",
-            Some("uninitialized code segment".to_string()),
+            "initial-code-base",
+            Some("base code segment for initialization".to_string()),
         );
 
         let mut current = code_seg;
@@ -466,10 +472,12 @@ impl CoreState {
         sorts: &MachineSorts,
         binary: &LoadedBinary,
     ) -> NodeId {
-        let data_seg = builder.input(
+        // Start with an anonymous state as base for the data segment init chain.
+        // (BTOR2 does not allow 'input' in init expressions)
+        let data_seg = builder.state(
             sorts.sid_data_state,
-            "initial-data",
-            Some("uninitialized data segment".to_string()),
+            "initial-data-base",
+            Some("base data segment for initialization".to_string()),
         );
 
         let mut current = data_seg;
