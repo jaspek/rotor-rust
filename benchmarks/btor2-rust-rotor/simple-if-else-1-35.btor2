@@ -1,0 +1,1179 @@
+1 sort bitvec 1 ; Boolean
+2 sort bitvec 8 ; 8-bit byte
+3 sort bitvec 16 ; 16-bit half word
+4 sort bitvec 32 ; 32-bit single word
+5 sort bitvec 64 ; 64-bit double word
+6 sort bitvec 128 ; 128-bit double machine word
+7 sort bitvec 2 ; 2-bit
+8 sort bitvec 3 ; 3-bit
+9 sort bitvec 4 ; 4-bit
+10 sort bitvec 5 ; 5-bit
+11 sort bitvec 6 ; 6-bit
+12 sort bitvec 7 ; 7-bit
+13 sort bitvec 9 ; 9-bit
+14 sort bitvec 10 ; 10-bit
+15 sort bitvec 12 ; 12-bit
+16 sort bitvec 13 ; 13-bit
+17 sort bitvec 20 ; 20-bit
+18 sort bitvec 21 ; 21-bit
+19 sort array 10 5 ; register file [5-bit -> machine word]
+20 sort array 5 4 ; code segment [addr -> 32-bit instruction]
+21 sort array 5 2 ; data segment [addr -> byte]
+22 constd 1 0 ; false
+23 constd 1 1 ; true
+24 constd 5 0 ; machine word 0
+25 constd 5 1 ; machine word 1
+26 constd 5 2 ; machine word 2
+27 constd 5 3 ; machine word 3
+28 constd 5 4 ; machine word 4
+29 constd 5 5 ; machine word 5
+30 constd 5 6 ; machine word 6
+31 constd 5 7 ; machine word 7
+32 constd 5 8 ; machine word 8
+33 constd 5 -1 ; machine word -1
+34 constd 2 0 ; byte 0
+35 constd 4 0 ; single word 0
+36 constd 10 0 ; register zero
+37 constd 10 1 ; register ra
+38 constd 10 2 ; register sp
+39 constd 10 3 ; register gp
+40 constd 10 4 ; register tp
+41 constd 10 5 ; register t0
+42 constd 10 6 ; register t1
+43 constd 10 7 ; register t2
+44 constd 10 8 ; register s0
+45 constd 10 9 ; register s1
+46 constd 10 10 ; register a0
+47 constd 10 11 ; register a1
+48 constd 10 12 ; register a2
+49 constd 10 13 ; register a3
+50 constd 10 14 ; register a4
+51 constd 10 15 ; register a5
+52 constd 10 16 ; register a6
+53 constd 10 17 ; register a7
+54 constd 10 18 ; register s2
+55 constd 10 19 ; register s3
+56 constd 10 20 ; register s4
+57 constd 10 21 ; register s5
+58 constd 10 22 ; register s6
+59 constd 10 23 ; register s7
+60 constd 10 24 ; register s8
+61 constd 10 25 ; register s9
+62 constd 10 26 ; register s10
+63 constd 10 27 ; register s11
+64 constd 10 28 ; register t3
+65 constd 10 29 ; register t4
+66 constd 10 30 ; register t5
+67 constd 10 31 ; register t6
+68 constd 2 1 ; ID_ecall
+69 constd 2 2 ; ID_add
+70 constd 2 3 ; ID_sub
+71 constd 2 4 ; ID_sll
+72 constd 2 5 ; ID_slt
+73 constd 2 6 ; ID_sltu
+74 constd 2 7 ; ID_xor
+75 constd 2 8 ; ID_srl
+76 constd 2 9 ; ID_sra
+77 constd 2 10 ; ID_or
+78 constd 2 11 ; ID_and
+79 constd 2 12 ; ID_addw
+80 constd 2 13 ; ID_subw
+81 constd 2 14 ; ID_sllw
+82 constd 2 15 ; ID_srlw
+83 constd 2 16 ; ID_sraw
+84 constd 2 17 ; ID_mul
+85 constd 2 18 ; ID_mulh
+86 constd 2 19 ; ID_mulhsu
+87 constd 2 20 ; ID_mulhu
+88 constd 2 21 ; ID_div
+89 constd 2 22 ; ID_divu
+90 constd 2 23 ; ID_rem
+91 constd 2 24 ; ID_remu
+92 constd 2 25 ; ID_mulw
+93 constd 2 26 ; ID_divw
+94 constd 2 27 ; ID_divuw
+95 constd 2 28 ; ID_remw
+96 constd 2 29 ; ID_remuw
+97 constd 2 30 ; ID_addi
+98 constd 2 31 ; ID_slti
+99 constd 2 32 ; ID_sltiu
+100 constd 2 33 ; ID_xori
+101 constd 2 34 ; ID_ori
+102 constd 2 35 ; ID_andi
+103 constd 2 36 ; ID_slli
+104 constd 2 37 ; ID_srli
+105 constd 2 38 ; ID_srai
+106 constd 2 39 ; ID_addiw
+107 constd 2 40 ; ID_slliw
+108 constd 2 41 ; ID_srliw
+109 constd 2 42 ; ID_sraiw
+110 constd 2 43 ; ID_lb
+111 constd 2 44 ; ID_lh
+112 constd 2 45 ; ID_lw
+113 constd 2 46 ; ID_ld
+114 constd 2 47 ; ID_lbu
+115 constd 2 48 ; ID_lhu
+116 constd 2 49 ; ID_lwu
+117 constd 2 50 ; ID_jalr
+118 constd 2 51 ; ID_sb
+119 constd 2 52 ; ID_sh
+120 constd 2 53 ; ID_sw
+121 constd 2 54 ; ID_sd
+122 constd 2 55 ; ID_beq
+123 constd 2 56 ; ID_bne
+124 constd 2 57 ; ID_blt
+125 constd 2 58 ; ID_bge
+126 constd 2 59 ; ID_bltu
+127 constd 2 60 ; ID_bgeu
+128 constd 2 61 ; ID_lui
+129 constd 2 62 ; ID_auipc
+130 constd 2 63 ; ID_jal
+131 constd 2 64 ; ID_c.mv
+132 constd 2 65 ; ID_c.add
+133 constd 2 66 ; ID_c.jr
+134 constd 2 67 ; ID_c.jalr
+135 constd 2 68 ; ID_c.li
+136 constd 2 69 ; ID_c.lui
+137 constd 2 70 ; ID_c.addi
+138 constd 2 71 ; ID_c.addiw
+139 constd 2 72 ; ID_c.addi16sp
+140 constd 2 73 ; ID_c.addi4spn
+141 constd 2 74 ; ID_c.slli
+142 constd 2 75 ; ID_c.srli
+143 constd 2 76 ; ID_c.srai
+144 constd 2 77 ; ID_c.andi
+145 constd 2 78 ; ID_c.sub
+146 constd 2 79 ; ID_c.xor
+147 constd 2 80 ; ID_c.or
+148 constd 2 81 ; ID_c.and
+149 constd 2 82 ; ID_c.addw
+150 constd 2 83 ; ID_c.subw
+151 constd 2 84 ; ID_c.lw
+152 constd 2 85 ; ID_c.ld
+153 constd 2 86 ; ID_c.sw
+154 constd 2 87 ; ID_c.sd
+155 constd 2 88 ; ID_c.lwsp
+156 constd 2 89 ; ID_c.ldsp
+157 constd 2 90 ; ID_c.swsp
+158 constd 2 91 ; ID_c.sdsp
+159 constd 2 92 ; ID_c.beqz
+160 constd 2 93 ; ID_c.bnez
+161 constd 2 94 ; ID_c.j
+162 constd 2 95 ; ID_c.jal
+163 constd 5 93 ; exit syscall id
+164 constd 5 63 ; read syscall id
+165 constd 5 64 ; write syscall id
+166 constd 5 56 ; openat syscall id
+167 constd 5 214 ; brk syscall id
+168 state 20 initial-code-base ; base code segment for initialization
+169 constd 5 65536
+170 constd 4 70327 ; code[0x10000] = 0x000112b7
+171 write 20 168 169 170
+172 constd 5 65540
+173 constd 4 8553107 ; code[0x10004] = 0x00828293
+174 write 20 171 172 173
+175 constd 5 65544
+176 constd 4 164243 ; code[0x10008] = 0x00028193
+177 write 20 174 175 176
+178 constd 5 65548
+179 constd 4 1299 ; code[0x1000c] = 0x00000513
+180 write 20 177 178 179
+181 constd 5 65552
+182 constd 4 224397459 ; code[0x10010] = 0x0d600893
+183 write 20 180 181 182
+184 constd 5 65556
+185 constd 4 115 ; code[0x10014] = 0x00000073
+186 write 20 183 184 185
+187 constd 5 65560
+188 constd 4 7669011 ; code[0x10018] = 0x00750513
+189 write 20 186 187 188
+190 constd 5 65564
+191 constd 4 8389267 ; code[0x1001c] = 0x00800293
+192 write 20 189 190 191
+193 constd 5 65568
+194 constd 4 39154355 ; code[0x10020] = 0x025572b3
+195 write 20 192 193 194
+196 constd 5 65572
+197 constd 4 1079313715 ; code[0x10024] = 0x40550533
+198 write 20 195 196 197
+199 constd 5 65576
+200 write 20 198 199 182
+201 constd 5 65580
+202 write 20 200 201 185
+203 constd 5 65584
+204 constd 4 4272012323 ; code[0x10030] = 0xfea1bc23
+205 write 20 202 203 204
+206 constd 5 65588
+207 constd 4 78467 ; code[0x10034] = 0x00013283
+208 write 20 205 206 207
+209 constd 5 65592
+210 constd 4 4286644499 ; code[0x10038] = 0xff810113
+211 write 20 208 209 210
+212 constd 5 65596
+213 constd 4 5320739 ; code[0x1003c] = 0x00513023
+214 write 20 211 212 213
+215 constd 5 65600
+216 constd 4 16843411 ; code[0x10040] = 0x01010293
+217 write 20 214 215 216
+218 constd 5 65604
+219 constd 4 5321763 ; code[0x10044] = 0x00513423
+220 write 20 217 218 219
+221 constd 5 65608
+222 constd 4 255852783 ; code[0x10048] = 0x0f4000ef
+223 write 20 220 221 222
+224 constd 5 65612
+225 write 20 223 224 210
+226 constd 5 65616
+227 constd 4 10563619 ; code[0x10050] = 0x00a13023
+228 write 20 225 226 227
+229 constd 5 65620
+230 constd 4 79107 ; code[0x10054] = 0x00013503
+231 write 20 228 229 230
+232 constd 5 65624
+233 constd 4 8454419 ; code[0x10058] = 0x00810113
+234 write 20 231 232 233
+235 constd 5 65628
+236 constd 4 97519763 ; code[0x1005c] = 0x05d00893
+237 write 20 234 235 236
+238 constd 5 65632
+239 write 20 237 238 185
+240 constd 5 65636
+241 write 20 239 240 230
+242 constd 5 65640
+243 write 20 241 242 233
+244 constd 5 65644
+245 constd 4 79235 ; code[0x1006c] = 0x00013583
+246 write 20 243 244 245
+247 constd 5 65648
+248 write 20 246 247 233
+249 constd 5 65652
+250 constd 4 79363 ; code[0x10074] = 0x00013603
+251 write 20 248 249 250
+252 constd 5 65656
+253 write 20 251 252 233
+254 constd 5 65660
+255 constd 4 66062483 ; code[0x1007c] = 0x03f00893
+256 write 20 253 254 255
+257 constd 5 65664
+258 write 20 256 257 185
+259 constd 5 65668
+260 constd 4 32871 ; code[0x10084] = 0x00008067
+261 write 20 258 259 260
+262 constd 5 65672
+263 write 20 261 262 230
+264 constd 5 65676
+265 write 20 263 264 233
+266 constd 5 65680
+267 write 20 265 266 245
+268 constd 5 65684
+269 write 20 267 268 233
+270 constd 5 65688
+271 write 20 269 270 250
+272 constd 5 65692
+273 write 20 271 272 233
+274 constd 5 65696
+275 constd 4 67111059 ; code[0x100a0] = 0x04000893
+276 write 20 273 274 275
+277 constd 5 65700
+278 write 20 276 277 185
+279 constd 5 65704
+280 write 20 278 279 260
+281 constd 5 65708
+282 write 20 280 281 245
+283 constd 5 65712
+284 write 20 282 283 233
+285 constd 5 65716
+286 write 20 284 285 250
+287 constd 5 65720
+288 write 20 286 287 233
+289 constd 5 65724
+290 constd 4 79491 ; code[0x100bc] = 0x00013683
+291 write 20 288 289 290
+292 constd 5 65728
+293 write 20 291 292 233
+294 constd 5 65732
+295 constd 4 4190110995 ; code[0x100c4] = 0xf9c00513
+296 write 20 293 294 295
+297 constd 5 65736
+298 constd 4 58722451 ; code[0x100c8] = 0x03800893
+299 write 20 296 297 298
+300 constd 5 65740
+301 write 20 299 300 185
+302 constd 5 65744
+303 write 20 301 302 260
+304 constd 5 65748
+305 write 20 303 304 207
+306 constd 5 65752
+307 write 20 305 306 233
+308 constd 5 65756
+309 constd 4 7504531 ; code[0x100dc] = 0x00728293
+310 write 20 307 308 309
+311 constd 5 65760
+312 constd 4 8389395 ; code[0x100e0] = 0x00800313
+313 write 20 310 311 312
+314 constd 5 65764
+315 constd 4 40039219 ; code[0x100e4] = 0x0262f333
+316 write 20 313 314 315
+317 constd 5 65768
+318 constd 4 1080197811 ; code[0x100e8] = 0x406282b3
+319 write 20 316 317 318
+320 constd 5 65772
+321 constd 4 4286690051 ; code[0x100ec] = 0xff81b303
+322 write 20 319 320 321
+323 constd 5 65776
+324 constd 4 5440819 ; code[0x100f0] = 0x00530533
+325 write 20 322 323 324
+326 constd 5 65780
+327 write 20 325 326 182
+328 constd 5 65784
+329 write 20 327 328 185
+330 constd 5 65788
+331 constd 4 6620259 ; code[0x100fc] = 0x00650463
+332 write 20 329 330 331
+333 constd 5 65792
+334 constd 4 2147 ; code[0x10100] = 0x00000863
+335 write 20 332 333 334
+336 constd 5 65796
+337 constd 4 5244515 ; code[0x10104] = 0x00500663
+338 write 20 335 336 337
+339 constd 5 65800
+340 write 20 338 339 179
+341 constd 5 65804
+342 constd 4 1635 ; code[0x1010c] = 0x00000663
+343 write 20 340 341 342
+344 constd 5 65808
+345 write 20 343 344 204
+346 constd 5 65812
+347 constd 4 197907 ; code[0x10114] = 0x00030513
+348 write 20 345 346 347
+349 constd 5 65816
+350 write 20 348 349 260
+351 constd 5 65820
+352 write 20 350 351 230
+353 constd 5 65824
+354 write 20 352 353 233
+355 constd 5 65828
+356 write 20 354 355 245
+357 constd 5 65832
+358 write 20 356 357 233
+359 constd 5 65836
+360 constd 4 420481171 ; code[0x1012c] = 0x19100893
+361 write 20 358 359 360
+362 constd 5 65840
+363 write 20 361 362 185
+364 constd 5 65844
+365 constd 4 525587 ; code[0x10134] = 0x00080513
+366 write 20 363 364 365
+367 constd 5 65848
+368 write 20 366 367 260
+369 constd 5 65852
+370 write 20 368 369 210
+371 constd 5 65856
+372 constd 4 1126435 ; code[0x10140] = 0x00113023
+373 write 20 370 371 372
+374 constd 5 65860
+375 write 20 373 374 210
+376 constd 5 65864
+377 constd 4 8466467 ; code[0x10148] = 0x00813023
+378 write 20 375 376 377
+379 constd 5 65868
+380 constd 4 66579 ; code[0x1014c] = 0x00010413
+381 write 20 378 379 380
+382 constd 5 65872
+383 constd 4 4278255891 ; code[0x10150] = 0xff010113
+384 write 20 381 382 383
+385 constd 5 65876
+386 constd 4 41943699 ; code[0x10154] = 0x02800293
+387 write 20 384 385 386
+388 constd 5 65880
+389 constd 4 4266933283 ; code[0x10158] = 0xfe543c23
+390 write 20 387 388 389
+391 constd 5 65884
+392 write 20 390 391 191
+393 constd 5 65888
+394 write 20 392 393 210
+395 constd 5 65892
+396 write 20 394 395 213
+397 constd 5 65896
+398 constd 4 4141871343 ; code[0x10168] = 0xf6dff0ef
+399 write 20 396 397 398
+400 constd 5 65900
+401 constd 4 328339 ; code[0x1016c] = 0x00050293
+402 write 20 399 400 401
+403 constd 5 65904
+404 constd 4 4266932259 ; code[0x10170] = 0xfe543823
+405 write 20 402 403 404
+406 constd 5 65908
+407 constd 4 4278465155 ; code[0x10174] = 0xff043283
+408 write 20 405 406 407
+409 constd 5 65912
+410 constd 4 787 ; code[0x10178] = 0x00000313
+411 write 20 408 409 410
+412 constd 5 65916
+413 constd 4 6467619 ; code[0x1017c] = 0x0062b023
+414 write 20 411 412 413
+415 constd 5 65920
+416 constd 4 659 ; code[0x10180] = 0x00000293
+417 write 20 414 415 416
+418 constd 5 65924
+419 constd 4 4269867283 ; code[0x10184] = 0xfe810113
+420 write 20 417 418 419
+421 constd 5 65928
+422 write 20 420 421 213
+423 constd 5 65932
+424 write 20 422 423 407
+425 constd 5 65936
+426 write 20 424 425 219
+427 constd 5 65940
+428 constd 4 1049235 ; code[0x10194] = 0x00100293
+429 write 20 426 427 428
+430 constd 5 65944
+431 constd 4 5322787 ; code[0x10198] = 0x00513823
+432 write 20 429 430 431
+433 constd 5 65948
+434 constd 4 3969904879 ; code[0x1019c] = 0xec9ff0ef
+435 write 20 432 433 434
+436 constd 5 65952
+437 write 20 435 436 407
+438 constd 5 65956
+439 constd 4 4278465283 ; code[0x101a4] = 0xff043303
+440 write 20 437 438 439
+441 constd 5 65960
+442 constd 4 209667 ; code[0x101a8] = 0x00033303
+443 write 20 440 441 442
+444 constd 5 65964
+445 constd 4 49283987 ; code[0x101ac] = 0x02f00393
+446 write 20 443 444 445
+447 constd 5 65968
+448 constd 4 1081279283 ; code[0x101b0] = 0x40730333
+449 write 20 446 447 448
+450 constd 5 65972
+451 write 20 449 450 413
+452 constd 5 65976
+453 write 20 451 452 407
+454 constd 5 65980
+455 constd 4 176771 ; code[0x101bc] = 0x0002b283
+456 write 20 453 454 455
+457 constd 5 65984
+458 constd 4 2097939 ; code[0x101c0] = 0x00200313
+459 write 20 456 457 458
+460 constd 5 65988
+461 constd 4 1079182003 ; code[0x101c4] = 0x405302b3
+462 write 20 459 460 461
+463 constd 5 65992
+464 constd 4 1049363 ; code[0x101c8] = 0x00100313
+465 write 20 462 463 464
+466 constd 5 65996
+467 constd 4 6468275 ; code[0x101cc] = 0x0062b2b3
+468 write 20 465 466 467
+469 constd 5 66000
+470 constd 4 167523 ; code[0x101d0] = 0x00028e63
+471 write 20 468 469 470
+472 constd 5 66004
+473 constd 4 4286853763 ; code[0x101d4] = 0xff843283
+474 write 20 471 472 473
+475 constd 5 66008
+476 write 20 474 475 439
+477 constd 5 66012
+478 write 20 476 477 442
+479 constd 5 66016
+480 constd 4 6455987 ; code[0x101e0] = 0x006282b3
+481 write 20 478 479 480
+482 constd 5 66020
+483 write 20 481 482 389
+484 constd 5 66024
+485 constd 4 33554543 ; code[0x101e8] = 0x0200006f
+486 write 20 483 484 485
+487 constd 5 66028
+488 write 20 486 487 473
+489 constd 5 66032
+490 write 20 488 489 439
+491 constd 5 66036
+492 write 20 490 491 442
+493 constd 5 66040
+494 constd 4 915 ; code[0x101f8] = 0x00000393
+495 write 20 492 493 494
+496 constd 5 66044
+497 constd 4 41091891 ; code[0x101fc] = 0x02730333
+498 write 20 495 496 497
+499 constd 5 66048
+500 write 20 498 499 480
+501 constd 5 66052
+502 write 20 500 501 389
+503 constd 5 66056
+504 write 20 502 503 473
+505 constd 5 66060
+506 constd 4 44040979 ; code[0x1020c] = 0x02a00313
+507 write 20 504 505 506
+508 constd 5 66064
+509 write 20 507 508 461
+510 constd 5 66068
+511 write 20 509 510 464
+512 constd 5 66072
+513 write 20 511 512 467
+514 constd 5 66076
+515 constd 4 166499 ; code[0x1021c] = 0x00028a63
+516 write 20 513 514 515
+517 constd 5 66080
+518 write 20 516 517 428
+519 constd 5 66084
+520 constd 4 165139 ; code[0x10224] = 0x00028513
+521 write 20 518 519 520
+522 constd 5 66088
+523 constd 4 25165935 ; code[0x10228] = 0x0180006f
+524 write 20 521 522 523
+525 constd 5 66092
+526 constd 4 16777327 ; code[0x1022c] = 0x0100006f
+527 write 20 524 525 526
+528 constd 5 66096
+529 write 20 527 528 416
+530 constd 5 66100
+531 write 20 529 530 520
+532 constd 5 66104
+533 constd 4 8388719 ; code[0x10238] = 0x0080006f
+534 write 20 531 532 533
+535 constd 5 66108
+536 write 20 534 535 179
+537 constd 5 66112
+538 constd 4 262419 ; code[0x10240] = 0x00040113
+539 write 20 536 537 538
+540 constd 5 66116
+541 constd 4 78851 ; code[0x10244] = 0x00013403
+542 write 20 539 540 541
+543 constd 5 66120
+544 write 20 542 543 233
+545 constd 5 66124
+546 constd 4 77955 ; code[0x1024c] = 0x00013083
+547 write 20 544 545 546
+548 constd 5 66128
+549 write 20 547 548 233
+550 constd 5 66132
+551 write 20 549 550 260
+552 state 21 initial-data-base ; base data segment for initialization
+553 constd 5 66136 ; code segment end
+554 constd 5 69632 ; data segment start
+555 constd 5 69640 ; data segment end
+556 constd 5 73736 ; heap segment end (max)
+557 constd 5 2147479552 ; stack segment start
+558 constd 5 2147483648 ; stack segment end
+559 state 19 base-register-file ; base register file for initialization
+560 constd 5 2147483640 ; initial stack pointer 0x7ffffff8
+561 write 19 559 38 560 ; set initial SP
+562 write 19 561 36 24 ; x0 = 0
+563 state 5 pc ; program counter
+564 init 5 563 169 ; init PC to entry point
+565 state 20 code-segment ; code segment (read-only)
+566 init 20 565 551 ; init code segment from binary
+567 state 21 data-segment ; data segment
+568 init 21 567 552 ; init data segment from binary
+569 state 21 heap-segment ; heap segment
+570 state 21 stack-segment ; stack segment
+571 state 19 register-file ; register file state
+572 init 19 571 562 ; init register file
+573 state 5 program-break ; program break state
+574 init 5 573 555 ; init program break
+575 state 21 input-buffer ; symbolic input buffer
+576 state 5 readable-bytes ; readable bytes remaining
+577 init 5 576 28 ; init readable bytes
+578 state 5 read-bytes ; bytes read so far
+579 init 5 578 24 ; init read bytes counter
+580 read 4 565 563 ; fetch instruction
+581 slice 7 580 1 0
+582 constd 7 3
+583 eq 1 581 582
+584 not 1 583 ; is compressed?
+585 slice 3 580 15 0 ; compressed IR
+586 slice 12 580 6 0 ; opcode
+587 slice 8 580 14 12 ; funct3
+588 slice 12 580 31 25 ; funct7
+589 constd 12 55
+590 eq 1 586 589 ; opcode == LUI
+591 constd 12 23
+592 eq 1 586 591
+593 constd 12 111
+594 eq 1 586 593
+595 constd 12 103
+596 eq 1 586 595
+597 constd 12 115
+598 eq 1 586 597
+599 constd 12 99
+600 eq 1 586 599
+601 constd 8 7
+602 eq 1 587 601
+603 ite 2 602 127 34
+604 constd 8 6
+605 eq 1 587 604
+606 ite 2 605 126 603
+607 constd 8 5
+608 eq 1 587 607
+609 ite 2 608 125 606
+610 constd 8 4
+611 eq 1 587 610
+612 ite 2 611 124 609
+613 constd 8 1
+614 eq 1 587 613
+615 ite 2 614 123 612
+616 constd 8 0
+617 eq 1 587 616
+618 ite 2 617 122 615
+619 ite 2 600 618 34 ; branch decode
+620 constd 12 3
+621 eq 1 586 620
+622 ite 2 605 116 34
+623 constd 8 3
+624 eq 1 587 623
+625 ite 2 624 113 622
+626 ite 2 608 115 625
+627 ite 2 611 114 626
+628 constd 8 2
+629 eq 1 587 628
+630 ite 2 629 112 627
+631 ite 2 614 111 630
+632 ite 2 617 110 631
+633 ite 2 621 632 34 ; load decode
+634 constd 12 35
+635 eq 1 586 634
+636 ite 2 624 121 34
+637 ite 2 629 120 636
+638 ite 2 614 119 637
+639 ite 2 617 118 638
+640 ite 2 635 639 34 ; store decode
+641 constd 12 19
+642 eq 1 586 641
+643 constd 12 0
+644 constd 12 32
+645 slice 11 580 31 26 ; funct6
+646 constd 11 0
+647 eq 1 645 646
+648 and 1 614 647
+649 ite 2 648 103 34
+650 constd 11 16
+651 and 1 608 647
+652 ite 2 651 104 649
+653 eq 1 645 650
+654 and 1 608 653
+655 ite 2 654 105 652
+656 ite 2 602 102 655
+657 ite 2 605 101 656
+658 ite 2 611 100 657
+659 ite 2 624 99 658
+660 ite 2 629 98 659
+661 ite 2 617 97 660
+662 ite 2 642 661 34 ; OP-IMM decode
+663 constd 12 51
+664 eq 1 586 663
+665 constd 12 1
+666 eq 1 588 643
+667 eq 1 588 644
+668 eq 1 588 665
+669 and 1 666 617
+670 ite 2 669 69 34
+671 and 1 666 614
+672 ite 2 671 71 670
+673 and 1 666 629
+674 ite 2 673 72 672
+675 and 1 666 624
+676 ite 2 675 73 674
+677 and 1 666 611
+678 ite 2 677 74 676
+679 and 1 666 608
+680 ite 2 679 75 678
+681 and 1 666 605
+682 ite 2 681 77 680
+683 and 1 666 602
+684 ite 2 683 78 682
+685 and 1 667 617
+686 ite 2 685 70 684
+687 and 1 667 608
+688 ite 2 687 76 686
+689 and 1 668 617
+690 ite 2 689 84 688
+691 and 1 668 614
+692 ite 2 691 85 690
+693 and 1 668 629
+694 ite 2 693 86 692
+695 and 1 668 624
+696 ite 2 695 87 694
+697 and 1 668 611
+698 ite 2 697 88 696
+699 and 1 668 608
+700 ite 2 699 89 698
+701 and 1 668 605
+702 ite 2 701 90 700
+703 and 1 668 602
+704 ite 2 703 91 702
+705 ite 2 664 704 34 ; OP decode
+706 constd 12 27
+707 eq 1 586 706
+708 ite 2 617 106 34
+709 and 1 614 666
+710 ite 2 709 107 708
+711 and 1 608 666
+712 ite 2 711 108 710
+713 and 1 608 667
+714 ite 2 713 109 712
+715 ite 2 707 714 34 ; OP-IMM-32 decode
+716 constd 12 59
+717 eq 1 586 716
+718 ite 2 669 79 34
+719 ite 2 671 81 718
+720 ite 2 679 82 719
+721 ite 2 685 80 720
+722 ite 2 687 83 721
+723 ite 2 689 92 722
+724 ite 2 697 93 723
+725 ite 2 699 94 724
+726 ite 2 701 95 725
+727 ite 2 703 96 726
+728 ite 2 717 727 34 ; OP-32 decode
+729 ite 2 598 68 34
+730 neq 1 728 34
+731 ite 2 730 728 729
+732 neq 1 715 34
+733 ite 2 732 715 731
+734 neq 1 705 34
+735 ite 2 734 705 733
+736 neq 1 662 34
+737 ite 2 736 662 735
+738 neq 1 640 34
+739 ite 2 738 640 737
+740 neq 1 633 34
+741 ite 2 740 633 739
+742 neq 1 619 34
+743 ite 2 742 619 741
+744 ite 2 596 117 743
+745 ite 2 594 130 744
+746 ite 2 592 129 745
+747 ite 2 590 128 746 ; instruction decode
+748 slice 7 585 1 0 ; c-opcode
+749 slice 8 585 15 13 ; c-funct3
+750 constd 7 0
+751 constd 7 1
+752 constd 7 2
+753 eq 1 748 750
+754 eq 1 748 751
+755 eq 1 748 752
+756 eq 1 749 601
+757 ite 2 756 154 34
+758 eq 1 749 604
+759 ite 2 758 153 757
+760 eq 1 749 623
+761 ite 2 760 152 759
+762 eq 1 749 628
+763 ite 2 762 151 761
+764 eq 1 749 616
+765 ite 2 764 140 763
+766 ite 2 764 137 34
+767 eq 1 749 613
+768 ite 2 767 138 766
+769 ite 2 762 135 768
+770 slice 10 585 11 7
+771 eq 1 770 38
+772 ite 2 771 139 136
+773 ite 2 760 772 769
+774 eq 1 749 610
+775 slice 7 585 11 10
+776 eq 1 775 750
+777 eq 1 775 751
+778 eq 1 775 752
+779 eq 1 775 582
+780 slice 7 585 6 5
+781 slice 1 585 12 12
+782 not 1 781
+783 eq 1 780 750
+784 eq 1 780 751
+785 eq 1 780 752
+786 eq 1 780 582
+787 and 1 782 783
+788 ite 2 787 145 34
+789 and 1 782 784
+790 ite 2 789 146 788
+791 and 1 782 785
+792 ite 2 791 147 790
+793 and 1 782 786
+794 ite 2 793 148 792
+795 and 1 781 783
+796 ite 2 795 150 794
+797 and 1 781 784
+798 ite 2 797 149 796
+799 ite 2 779 798 34
+800 ite 2 778 144 799
+801 ite 2 777 143 800
+802 ite 2 776 142 801
+803 ite 2 774 802 773
+804 eq 1 749 607
+805 ite 2 804 161 803
+806 ite 2 758 159 805
+807 ite 2 756 160 806
+808 ite 2 764 141 34
+809 ite 2 762 155 808
+810 ite 2 760 156 809
+811 slice 10 585 6 2
+812 eq 1 811 36
+813 ite 2 812 133 131
+814 ite 2 812 134 132
+815 ite 2 781 814 813
+816 ite 2 774 815 810
+817 ite 2 758 157 816
+818 ite 2 756 158 817
+819 ite 2 755 818 34 ; C quadrant 2?
+820 ite 2 754 807 819 ; C quadrant 1?
+821 ite 2 753 765 820 ; C quadrant 0?
+822 ite 2 584 821 747 ; select instruction ID
+823 slice 10 580 11 7 ; rd
+824 slice 10 580 19 15 ; rs1
+825 slice 10 580 24 20 ; rs2
+826 read 5 571 824 ; rs1 value
+827 read 5 571 825 ; rs2 value
+828 slice 15 580 31 20 ; I-imm[11:0]
+829 sext 5 828 52 ; sign-extend I-immediate
+830 concat 15 588 823 ; S-imm[11:0]
+831 sext 5 830 52 ; sign-extend S-immediate
+832 slice 1 580 31 31 ; SB-imm[12]
+833 slice 1 580 7 7 ; SB-imm[11]
+834 slice 11 580 30 25 ; SB-imm[10:5]
+835 slice 9 580 11 8 ; SB-imm[4:1]
+836 concat 7 832 833
+837 concat 2 836 834
+838 concat 15 837 835
+839 concat 16 838 22
+840 sext 5 839 51 ; sign-extend SB-immediate
+841 slice 17 580 31 12 ; U-imm[31:12]
+842 constd 15 0 ; 12 zero bits
+843 concat 4 841 842 ; U-imm << 12
+844 sext 5 843 32 ; sign-extend U-immediate
+845 slice 2 580 19 12 ; UJ-imm[19:12]
+846 slice 1 580 20 20 ; UJ-imm[11]
+847 slice 14 580 30 21 ; UJ-imm[10:1]
+848 concat 13 832 845
+849 concat 14 848 846
+850 concat 17 849 847
+851 concat 18 850 22
+852 sext 5 851 43 ; sign-extend UJ-immediate
+853 add 5 563 28 ; PC + 4
+854 add 5 563 26 ; PC + 2
+855 ite 5 584 854 853 ; next sequential PC
+856 add 5 826 829 ; rs1 + I-imm (load addr)
+857 add 5 826 831 ; rs1 + S-imm (store addr)
+858 ugte 1 856 557
+859 ult 1 856 558
+860 and 1 858 859 ; addr in stack segment?
+861 ugte 1 856 555
+862 ult 1 856 556
+863 and 1 861 862 ; addr in heap segment?
+864 ite 21 863 569 567 ; heap segment?
+865 ite 21 860 570 864 ; stack segment?
+866 add 5 826 827
+867 sub 5 826 827
+868 sll 5 826 827
+869 slt 1 826 827
+870 ite 5 869 25 24 ; slt result
+871 ult 1 826 827
+872 ite 5 871 25 24 ; sltu result
+873 xor 5 826 827
+874 srl 5 826 827
+875 sra 5 826 827
+876 or 5 826 827
+877 and 5 826 827
+878 slt 1 826 829
+879 ite 5 878 25 24
+880 ult 1 826 829
+881 ite 5 880 25 24
+882 xor 5 826 829
+883 or 5 826 829
+884 and 5 826 829
+885 and 5 829 164 ; shift amount
+886 sll 5 826 885
+887 srl 5 826 885
+888 sra 5 826 885
+889 add 5 563 844 ; PC + U-imm
+890 read 2 865 856 ; load byte
+891 sext 5 890 56 ; sign-extend byte
+892 uext 5 890 56 ; zero-extend byte
+893 add 5 856 25
+894 read 2 865 893 ; load byte 1
+895 concat 3 894 890 ; half-word (LE)
+896 sext 5 895 48 ; sign-extend half-word
+897 uext 5 895 48 ; zero-extend half-word
+898 add 5 856 26
+899 read 2 865 898
+900 add 5 856 27
+901 read 2 865 900
+902 concat 3 901 899
+903 concat 4 902 895 ; word (LE)
+904 sext 5 903 32 ; sign-extend word
+905 uext 5 903 32 ; zero-extend word
+906 add 5 856 28
+907 read 2 865 906
+908 add 5 856 29
+909 read 2 865 908
+910 add 5 856 30
+911 read 2 865 910
+912 add 5 856 31
+913 read 2 865 912
+914 concat 3 909 907
+915 concat 3 913 911
+916 concat 4 915 914
+917 concat 5 916 903 ; double-word (LE)
+918 mul 5 826 827
+919 sdiv 5 826 827
+920 udiv 5 826 827
+921 srem 5 826 827
+922 urem 5 826 827
+923 eq 1 827 24
+924 eq 1 822 88
+925 eq 1 822 89
+926 eq 1 822 90
+927 eq 1 822 91
+928 or 1 924 925
+929 or 1 926 927
+930 or 1 928 929 ; is div/rem instruction?
+931 and 1 930 923 ; division by zero?
+932 ugte 1 856 169
+933 ult 1 856 553
+934 and 1 932 933
+935 ugte 1 856 554
+936 ult 1 856 555
+937 and 1 935 936 ; addr in data segment?
+938 or 1 937 863
+939 or 1 938 860 ; valid write address?
+940 or 1 934 939 ; valid read address?
+941 ugte 1 857 554
+942 ult 1 857 555
+943 and 1 941 942 ; addr in data segment?
+944 ugte 1 857 555
+945 ult 1 857 556
+946 and 1 944 945 ; addr in heap segment?
+947 ugte 1 857 557
+948 ult 1 857 558
+949 and 1 947 948 ; addr in stack segment?
+950 or 1 943 946
+951 or 1 950 949 ; valid write address?
+952 eq 1 822 110
+953 or 1 22 952
+954 eq 1 822 111
+955 or 1 953 954
+956 eq 1 822 112
+957 or 1 955 956
+958 eq 1 822 114
+959 or 1 957 958
+960 eq 1 822 115
+961 or 1 959 960
+962 eq 1 822 113
+963 eq 1 822 116
+964 or 1 961 962
+965 or 1 964 963
+966 eq 1 822 118
+967 or 1 22 966
+968 eq 1 822 119
+969 or 1 967 968
+970 eq 1 822 120
+971 or 1 969 970
+972 eq 1 822 121
+973 or 1 971 972
+974 not 1 940
+975 and 1 965 974
+976 not 1 951
+977 and 1 973 976
+978 or 1 975 977 ; invalid memory access?
+979 ite 5 962 917 24
+980 ite 5 963 905 979
+981 ite 5 956 904 980
+982 ite 5 960 897 981
+983 ite 5 954 896 982
+984 ite 5 958 892 983
+985 ite 5 952 891 984
+986 ite 5 927 922 985
+987 ite 5 926 921 986
+988 ite 5 925 920 987
+989 ite 5 924 919 988
+990 eq 1 822 84
+991 ite 5 990 918 989
+992 eq 1 822 78
+993 ite 5 992 877 991
+994 eq 1 822 77
+995 ite 5 994 876 993
+996 eq 1 822 76
+997 ite 5 996 875 995
+998 eq 1 822 75
+999 ite 5 998 874 997
+1000 eq 1 822 74
+1001 ite 5 1000 873 999
+1002 eq 1 822 73
+1003 ite 5 1002 872 1001
+1004 eq 1 822 72
+1005 ite 5 1004 870 1003
+1006 eq 1 822 71
+1007 ite 5 1006 868 1005
+1008 eq 1 822 70
+1009 ite 5 1008 867 1007
+1010 eq 1 822 69
+1011 ite 5 1010 866 1009
+1012 eq 1 822 105
+1013 ite 5 1012 888 1011
+1014 eq 1 822 104
+1015 ite 5 1014 887 1013
+1016 eq 1 822 103
+1017 ite 5 1016 886 1015
+1018 eq 1 822 102
+1019 ite 5 1018 884 1017
+1020 eq 1 822 101
+1021 ite 5 1020 883 1019
+1022 eq 1 822 100
+1023 ite 5 1022 882 1021
+1024 eq 1 822 99
+1025 ite 5 1024 881 1023
+1026 eq 1 822 98
+1027 ite 5 1026 879 1025
+1028 eq 1 822 97
+1029 ite 5 1028 856 1027
+1030 eq 1 822 128
+1031 ite 5 1030 844 1029
+1032 eq 1 822 129
+1033 ite 5 1032 889 1031
+1034 eq 1 822 130
+1035 ite 5 1034 855 1033
+1036 eq 1 822 117
+1037 ite 5 1036 855 1035
+1038 eq 1 826 827
+1039 neq 1 826 827
+1040 sgte 1 826 827
+1041 ugte 1 826 827
+1042 add 5 563 840 ; branch target
+1043 add 5 563 852 ; JAL target
+1044 constd 5 -2
+1045 and 5 856 1044 ; JALR target (LSB cleared)
+1046 eq 1 822 127
+1047 and 1 1046 1041
+1048 ite 5 1047 1042 855
+1049 eq 1 822 126
+1050 and 1 1049 871
+1051 ite 5 1050 1042 1048
+1052 eq 1 822 125
+1053 and 1 1052 1040
+1054 ite 5 1053 1042 1051
+1055 eq 1 822 124
+1056 and 1 1055 869
+1057 ite 5 1056 1042 1054
+1058 eq 1 822 123
+1059 and 1 1058 1039
+1060 ite 5 1059 1042 1057
+1061 eq 1 822 122
+1062 and 1 1061 1038
+1063 ite 5 1062 1042 1060
+1064 ite 5 1034 1043 1063
+1065 ite 5 1036 1045 1064
+1066 not 1 965
+1067 or 1 973 22
+1068 or 1 22 1061
+1069 or 1 1068 1058
+1070 or 1 1069 1055
+1071 or 1 1070 1052
+1072 or 1 1071 1049
+1073 or 1 1072 1046
+1074 eq 1 822 68
+1075 or 1 1067 1073
+1076 or 1 1075 1074
+1077 not 1 1076 ; instruction writes rd?
+1078 ite 5 966 25 24
+1079 ite 5 968 26 1078
+1080 ite 5 970 28 1079
+1081 ite 5 972 32 1080
+1082 next 5 563 1065 ; next PC
+1083 read 5 571 53 ; a7 (syscall id)
+1084 read 5 571 46 ; a0 (syscall arg)
+1085 eq 1 1083 163 ; syscall == exit?
+1086 eq 1 1083 164 ; syscall == read?
+1087 eq 1 1083 165 ; syscall == write?
+1088 eq 1 1083 166 ; syscall == openat?
+1089 eq 1 1083 167 ; syscall == brk?
+1090 eq 1 1084 24
+1091 ite 5 1090 573 1084
+1092 ite 5 1088 24 1084
+1093 ite 5 1087 1084 1092
+1094 ite 5 1086 576 1093
+1095 ite 5 1089 1091 1094 ; ecall return value
+1096 write 19 571 823 1037 ; write rd
+1097 eq 1 823 36 ; rd == x0?
+1098 ite 19 1097 571 1096 ; x0 write guard
+1099 write 19 571 46 1095 ; ecall: write a0
+1100 ite 19 1077 1098 571 ; register update (rd)
+1101 ite 19 1074 1099 1100 ; register update (ecall)
+1102 next 19 571 1101 ; next register file
+1103 slice 2 827 7 0 ; extract byte
+1104 write 21 567 857 1103 ; store byte
+1105 slice 2 827 15 8
+1106 add 5 857 25
+1107 write 21 1104 1106 1105 ; store half-word (LE)
+1108 slice 2 827 23 16
+1109 slice 2 827 31 24
+1110 add 5 857 26
+1111 write 21 1107 1110 1108
+1112 add 5 857 27
+1113 write 21 1111 1112 1109 ; store word (LE)
+1114 ite 21 966 1104 567
+1115 ite 21 968 1107 1114
+1116 ite 21 970 1113 1115
+1117 slice 2 827 39 32
+1118 slice 2 827 47 40
+1119 slice 2 827 55 48
+1120 slice 2 827 63 56
+1121 add 5 857 28
+1122 write 21 1113 1121 1117
+1123 add 5 857 29
+1124 write 21 1122 1123 1118
+1125 add 5 857 30
+1126 write 21 1124 1125 1119
+1127 add 5 857 31
+1128 write 21 1126 1127 1120 ; store double-word (LE)
+1129 ite 21 972 1128 1116
+1130 ite 21 943 1129 567
+1131 ite 21 973 1130 567 ; next data segment
+1132 next 21 567 1131 ; next data segment
+1133 write 21 569 857 1103 ; store byte
+1134 write 21 1133 1106 1105 ; store half-word (LE)
+1135 write 21 1134 1110 1108
+1136 write 21 1135 1112 1109 ; store word (LE)
+1137 ite 21 966 1133 569
+1138 ite 21 968 1134 1137
+1139 ite 21 970 1136 1138
+1140 write 21 1136 1121 1117
+1141 write 21 1140 1123 1118
+1142 write 21 1141 1125 1119
+1143 write 21 1142 1127 1120 ; store double-word (LE)
+1144 ite 21 972 1143 1139
+1145 ite 21 946 1144 569
+1146 ite 21 973 1145 569 ; next heap segment
+1147 next 21 569 1146 ; next heap segment
+1148 write 21 570 857 1103 ; store byte
+1149 write 21 1148 1106 1105 ; store half-word (LE)
+1150 write 21 1149 1110 1108
+1151 write 21 1150 1112 1109 ; store word (LE)
+1152 ite 21 966 1148 570
+1153 ite 21 968 1149 1152
+1154 ite 21 970 1151 1153
+1155 write 21 1151 1121 1117
+1156 write 21 1155 1123 1118
+1157 write 21 1156 1125 1119
+1158 write 21 1157 1127 1120 ; store double-word (LE)
+1159 ite 21 972 1158 1154
+1160 ite 21 949 1159 570
+1161 ite 21 973 1160 570 ; next stack segment
+1162 next 21 570 1161 ; next stack segment
+1163 next 20 565 565 ; code segment unchanged
+1164 and 1 1074 1089
+1165 ite 5 1164 1091 573 ; next program break
+1166 next 5 573 1165 ; next program break
+1167 and 1 1074 1086
+1168 sub 5 576 25
+1169 ite 5 1167 1168 576 ; next readable bytes
+1170 next 5 576 1169 ; next readable bytes
+1171 add 5 578 25
+1172 ite 5 1167 1171 578 ; next read bytes
+1173 next 5 578 1172 ; next read bytes counter
+1174 and 1 1074 1085
+1175 neq 1 1084 24 ; exit code != 0
+1176 and 1 1174 1175 ; exit with non-zero code
+1177 bad 1176 bad-exit-code ; exit(a0) where a0 != 0
+1178 bad 931 division-by-zero ; division or remainder by zero
+1179 bad 978 segmentation-fault ; memory access outside valid segments

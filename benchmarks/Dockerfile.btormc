@@ -1,0 +1,17 @@
+FROM ubuntu:24.04
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ cmake make git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build btor2tools (includes btormc)
+RUN git clone --depth 1 https://github.com/Boolector/btor2tools.git /btor2tools && \
+    cd /btor2tools && \
+    mkdir build && cd build && \
+    cmake .. && make -j$(nproc) && \
+    cp bin/catbtor /usr/local/bin/ && \
+    cp bin/btorsim /usr/local/bin/
+
+# Copy benchmark files in at runtime via volume mount
+WORKDIR /benchmarks
+ENTRYPOINT ["/bin/bash"]
