@@ -2,9 +2,24 @@
 
 A BTOR2 model generator for RISC-V machines, rewritten in Rust from the [selfie project](https://github.com/cksystemsteaching/selfie).
 
-Rotor translates RISC-V ELF binaries into [BTOR2](https://link.springer.com/chapter/10.1007/978-3-319-96145-3_32) format for formal verification via bounded model checking.
+Rotor translates RISC-V ELF binaries into [BTOR2](https://link.springer.com/chapter/10.1007/978-3-319-96145-3_32) format for formal verification via bounded model checking. This project also includes **symbolic argv support** for verifying programs with arbitrary command-line inputs and an **interactive web-based BTOR2 visualizer** with witness trace animation.
 
-## Features
+> **University of Salzburg** — Advanced Systems Engineering
+> Jasmin Begic & Daniel Wassie, supervised by Prof. Christoph Kirsch
+
+## Project Structure
+
+This project consists of three parts:
+
+| Part | Description | Location |
+|------|-------------|----------|
+| **Part 1** | Rust rewrite of Rotor (BTOR2 model generator) | `rotor/` |
+| **Part 2** | Symbolic argv support for input-dependent verification | `benchmarks/argv-tests/` |
+| **Part 3** | Interactive BTOR2 web visualizer | `visualizer/` |
+
+## Part 1: Rotor in Rust
+
+### Features
 
 - **RISC-V support**: RV32I/RV64I base integer ISA, M extension (multiply/divide), C extension (compressed instructions)
 - **Multi-core**: Configurable number of cores
@@ -14,13 +29,14 @@ Rotor translates RISC-V ELF binaries into [BTOR2](https://link.springer.com/chap
 - **HashMap-based CSE**: O(1) common subexpression elimination (vs O(n) in the C original)
 - **Arena allocation**: Cache-friendly node storage with stable indices
 
-## Building
+### Building
 
 ```bash
+cd rotor
 cargo build --release
 ```
 
-## Usage
+### Usage
 
 ```bash
 # Generate BTOR2 model from a RISC-V ELF binary
@@ -42,14 +58,35 @@ rotor --synthesis -o model.btor2
 rotor <binary.elf> --comments
 ```
 
-## Architecture
+### Architecture
 
 ```
-src/
-  btor2/          BTOR2 IR builder, node types, printer
-  riscv/          ISA definitions, ELF loader, instruction decode
-  machine/        Sorts, registers, memory, kernel, per-core state
-  model/          Combinational logic, sequential logic, properties
+rotor/src/
+  main.rs              CLI entry point (clap)
+  lib.rs               Public API re-exports
+  config.rs            Config: RV32/64, M/C extensions, property checks
+  btor2/
+    builder.rs         BTOR2 IR builder with HashMap CSE
+    node.rs            NodeId, Op enum, BinaryOp, Node
+    sort.rs            Sort enum (Bitvec, Array)
+    printer.rs         BTOR2 text output (topological order)
+  riscv/
+    isa.rs             InstrId enum, opcode/funct constants
+    elf_loader.rs      ELF loading via goblin
+    decode.rs          RV64I/RV32I + M instruction decode
+    compressed.rs      RVC compressed instruction decode
+  machine/
+    sorts.rs           MachineSorts + MachineConstants
+    registers.rs       Register file model (32 regs)
+    memory.rs          Segmented memory (code/data/heap/stack)
+    segmentation.rs    Segment bounds, address translation
+    kernel.rs          Kernel state (syscalls, brk, I/O)
+    core.rs            Per-core state (PC, IR)
+  model/
+    combinational.rs   Instruction semantics (data flow + control flow)
+    sequential.rs      Next-state logic (PC, regs, memory)
+    properties.rs      Bad states (exit!=0, div-by-0, seg faults)
+    generator.rs       Top-level model generation pipeline
 ```
 
 ### Pipeline
@@ -62,17 +99,155 @@ src/
 6. **Generate** safety properties (bad states)
 7. **Print** BTOR2 model
 
+## Part 2: Symbolic argv
+
+Extends Rotor to support verification of programs with symbolic command-line arguments. Instead of concrete input values, `argv` entries are modeled as unconstrained symbolic bitvectors, allowing the model checker to explore all possible inputs.
+
+### Test Programs
+
+Five C test programs in `benchmarks/argv-tests/` exercise different input-dependent behaviors:
+
+| Program | What it tests |
+|---------|---------------|
+| `test1_crash_string.c` | String comparison triggering a crash |
+| `test2_numeric_overflow.c` | Integer overflow from parsed input |
+| `test3_length_dependent.c` | Behavior dependent on argument length |
+| `test4_multi_arg.c` | Multiple argument interaction |
+| `test5_checksum.c` | Checksum computation over input bytes |
+
+### Generating argv Models
+
+```bash
+# Compile with selfie, then generate BTOR2 with symbolic argv
+rotor <binary.elf> --symbolic-argv -o model-argv.btor2
+```
+
+## Part 3: BTOR2 Visualizer
+
+An interactive web-based graph viewer for BTOR2 hardware models with witness trace animation.
+
+### Features
+
+- **Graph visualization**: Renders BTOR2 models as interactive node graphs using Cytoscape.js
+- **Dual layout modes**: Hierarchical (dagre) and force-directed (cose) layouts
+- **Subgraph views**: View the cone of influence for any bad property or state node
+- **Depth-limited exploration**: Slider to control how deep into the dependency tree to display
+- **Node collapse/expand**: Double-click nodes to collapse their subtrees
+- **Category clumping**: Group logic, state, memory, or constant nodes into single meta-nodes
+- **Longest path highlighting**: Visualize the critical path through the model
+- **Witness trace animation**: Step-by-step playback of btormc counterexample traces
+- **Search**: Find nodes by ID, operation, or name
+- **Node shapes by category**: Octagon (bad), diamond (constant), barrel (input), pentagon (memory), hexagon (constraint)
+
+### Running the Visualizer
+
+```bash
+# Serve the visualizer directory with any HTTP server
+cd visualizer
+python -m http.server 8080
+
+# Then open http://localhost:8080 in your browser
+```
+
+### Loading Models
+
+- **Upload**: Click "Upload" to load a `.btor2` file from disk
+- **Paste**: Click "Paste" to paste BTOR2 text directly
+- **Example**: Click "Example" to load a bundled example model
+
+### Witness Trace Playback
+
+The visualizer can animate counterexample witness traces produced by [btormc](https://github.com/Boolector/btor2tools):
+
+```bash
+# Generate a witness trace with btormc
+btormc --trace-gen-full -kmax 100 model.btor2 > trace.wit
+
+# Or via Docker
+docker run --rm --entrypoint /bin/bash \
+  -v "$(pwd):/work" btormc \
+  -c "btormc --trace-gen-full -kmax 100 /work/model.btor2"
+```
+
+Then load the `.wit` file in the visualizer using "Load Trace" or click "Example" in the Witness Trace section for a demo.
+
+**Playback controls**: Play/pause, step forward/back, jump to start/end, adjustable speed. Keyboard shortcuts: Arrow keys (step), Space (play/pause), Home/End (jump).
+
+### Example Files
+
+| File | Description |
+|------|-------------|
+| `examples/simple-assignment-1-35.btor2` | Rotor output for a simple C program (~1142 nodes) |
+| `examples/counter-with-input.btor2` | Small counter model with state + input (19 nodes) |
+| `examples/counter-with-input.wit` | Real btormc witness trace (6 steps, counter overflow) |
+| `examples/division-by-zero-c.wit` | Real btormc witness trace (77 steps, from C rotor) |
+
+## Benchmarks
+
+Pre-generated BTOR2 models for 17+ selfie test programs:
+
+```
+benchmarks/
+  btor2-rust-rotor/     Rust Rotor output (with and without argv)
+  btor2-c-rotor/        C Rotor reference output
+  binaries/             Compiled RISC-V binaries (.m format)
+  Dockerfile            Docker setup for selfie compilation
+  Dockerfile.btormc     Docker setup for btormc model checker
+```
+
+### Running Benchmarks
+
+```bash
+cd benchmarks
+
+# Build Docker images
+docker build -t selfie .
+docker build -t btormc -f Dockerfile.btormc .
+
+# Compile a C program with selfie
+docker run --rm -v "$(pwd):/work" selfie \
+  /opt/selfie/selfie -c /work/test.c -o /work/test.m
+
+# Generate BTOR2 with Rust Rotor
+cargo run --release -- /work/test.m -o model.btor2
+
+# Verify with btormc
+docker run --rm --entrypoint /bin/bash \
+  -v "$(pwd):/work" btormc \
+  -c "btormc -kmax 100 /work/model.btor2"
+```
+
 ## Verification
 
 The generated BTOR2 models can be verified with:
 - [btormc](https://github.com/Boolector/btor2tools) — BTOR2 bounded model checker
 - [Bitwuzla](https://bitwuzla.github.io/) — SMT solver with BTOR2 support
 
+## Dependencies
+
+### Rust (rotor)
+
+| Crate | Purpose |
+|-------|---------|
+| `goblin` | ELF binary parsing |
+| `clap` | CLI argument parsing |
+| `thiserror` | Error types |
+| `log` + `env_logger` | Debug logging |
+
+### Visualizer (CDN)
+
+| Library | Purpose |
+|---------|---------|
+| [Cytoscape.js](https://js.cytoscape.org/) | Graph rendering and interaction |
+| [dagre](https://github.com/dagrejs/dagre) | Hierarchical graph layout |
+| [cytoscape-dagre](https://github.com/cytoscape/cytoscape.js-dagre) | Cytoscape-dagre integration |
+
 ## References
 
 - [Selfie project](https://github.com/cksystemsteaching/selfie) — Original C implementation
 - [BTOR2 format](https://link.springer.com/chapter/10.1007/978-3-319-96145-3_32) — BTOR2, BtorMC and Boolector 3.0
 - [Agent-BiTR](https://github.com/cksystemsgroup/agent-bitr) — Related work on agent-based bounded model checking
+- Diller (2022) — *Visualizing BTOR2 Models* (thesis, inspiration for visualizer features)
 
 ## License
 
