@@ -1,0 +1,30 @@
+; Counter model with states and inputs for witness visualization demo
+1 sort bitvec 8
+2 sort bitvec 1
+
+; Input: threshold value
+3 input 1 threshold
+
+; State: counter (starts at 0, increments by 1)
+4 zero 1
+5 state 1 counter
+6 one 1
+7 add 1 5 6
+8 init 1 5 4
+9 next 1 5 7
+
+; State: accumulator (starts at 0, increments by 2)
+10 constd 1 2
+11 state 1 accumulator
+12 add 1 11 10
+13 init 1 11 4
+14 next 1 11 12
+
+; Bad: counter >= 5
+15 constd 1 5
+16 ugte 2 5 15
+17 bad 16 counter-overflow
+
+; Constraint: threshold > 0
+18 ugt 2 3 4
+19 constraint 18
