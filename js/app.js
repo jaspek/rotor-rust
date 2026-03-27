@@ -89,6 +89,30 @@ btnClearHighlight.addEventListener('click', () => {
     if (player.loaded) player.goToStep(player.currentStep);
 });
 
+// Export buttons
+const btnExportPng = document.getElementById('btn-export-png');
+const btnExportSvg = document.getElementById('btn-export-svg');
+btnExportPng.addEventListener('click', () => {
+    if (!cy) return;
+    const png = cy.png({ full: true, scale: 2, bg: '#12131a' });
+    const a = document.createElement('a');
+    a.href = png;
+    a.download = 'btor2-graph.png';
+    a.click();
+    setStatus('Exported PNG');
+});
+btnExportSvg.addEventListener('click', () => {
+    if (!cy) return;
+    const svgContent = cy.svg({ full: true, scale: 1, bg: '#12131a' });
+    const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'btor2-graph.svg';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setStatus('Exported SVG');
+});
+
 // Subgraph root selector
 selectRoot.addEventListener('change', () => {
     const val = selectRoot.value;
