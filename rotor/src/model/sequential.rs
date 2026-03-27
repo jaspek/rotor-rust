@@ -139,7 +139,12 @@ pub fn rotor_sequential(
 
     // Readable bytes: decrement on read syscall (simplified)
     let is_read_ecall = builder.and_node(bool_sid, comb.is_ecall, syscall.is_read, None);
-    let decremented = builder.sub(mw_sid, core.kernel.readable_bytes, consts.nid_machine_word_1, None);
+    let decremented = builder.sub(
+        mw_sid,
+        core.kernel.readable_bytes,
+        consts.nid_machine_word_1,
+        None,
+    );
     let next_readable = builder.ite(
         mw_sid,
         is_read_ecall,
@@ -155,7 +160,12 @@ pub fn rotor_sequential(
     );
 
     // Read bytes counter: increment on read syscall
-    let incremented = builder.add(mw_sid, core.kernel.read_bytes, consts.nid_machine_word_1, None);
+    let incremented = builder.add(
+        mw_sid,
+        core.kernel.read_bytes,
+        consts.nid_machine_word_1,
+        None,
+    );
     let next_read = builder.ite(
         mw_sid,
         is_read_ecall,
@@ -184,31 +194,81 @@ fn sequential_memory(
 
     // For each store instruction, update the appropriate segment.
     // Store byte
-    let sb_cond = builder.eq_node(bool_sid, comb.instruction_id, consts.nid_instr_id(InstrId::Sb), None);
+    let sb_cond = builder.eq_node(
+        bool_sid,
+        comb.instruction_id,
+        consts.nid_instr_id(InstrId::Sb),
+        None,
+    );
     // Store half-word
-    let sh_cond = builder.eq_node(bool_sid, comb.instruction_id, consts.nid_instr_id(InstrId::Sh), None);
+    let sh_cond = builder.eq_node(
+        bool_sid,
+        comb.instruction_id,
+        consts.nid_instr_id(InstrId::Sh),
+        None,
+    );
     // Store word
-    let sw_cond = builder.eq_node(bool_sid, comb.instruction_id, consts.nid_instr_id(InstrId::Sw), None);
+    let sw_cond = builder.eq_node(
+        bool_sid,
+        comb.instruction_id,
+        consts.nid_instr_id(InstrId::Sw),
+        None,
+    );
     // Store double-word (RV64)
     let sd_cond = if config.xlen == crate::config::Xlen::X64 {
-        builder.eq_node(bool_sid, comb.instruction_id, consts.nid_instr_id(InstrId::Sd), None)
+        builder.eq_node(
+            bool_sid,
+            comb.instruction_id,
+            consts.nid_instr_id(InstrId::Sd),
+            None,
+        )
     } else {
         consts.nid_false
     };
 
     // Determine which segment the store address falls into
-    let in_data = core.segmentation.is_in_data_segment(builder, sorts, comb.store_addr);
-    let in_heap = core.segmentation.is_in_heap_segment(builder, sorts, comb.store_addr);
-    let in_stack = core.segmentation.is_in_stack_segment(builder, sorts, comb.store_addr);
+    let in_data = core
+        .segmentation
+        .is_in_data_segment(builder, sorts, comb.store_addr);
+    let in_heap = core
+        .segmentation
+        .is_in_heap_segment(builder, sorts, comb.store_addr);
+    let in_stack = core
+        .segmentation
+        .is_in_stack_segment(builder, sorts, comb.store_addr);
 
     // Helper: build store for each width for a given segment
     let build_segment_store = |builder: &mut Btor2Builder,
-                                seg_state: NodeId,
-                                seg_sid: NodeId,
-                                in_seg: NodeId| -> NodeId {
-        let sb_mem = Memory::store_byte(builder, sorts, seg_state, comb.store_addr, comb.store_value, seg_sid);
-        let sh_mem = Memory::store_half_word(builder, sorts, consts, seg_state, comb.store_addr, comb.store_value, seg_sid);
-        let sw_mem = Memory::store_word(builder, sorts, consts, seg_state, comb.store_addr, comb.store_value, seg_sid);
+                               seg_state: NodeId,
+                               seg_sid: NodeId,
+                               in_seg: NodeId|
+     -> NodeId {
+        let sb_mem = Memory::store_byte(
+            builder,
+            sorts,
+            seg_state,
+            comb.store_addr,
+            comb.store_value,
+            seg_sid,
+        );
+        let sh_mem = Memory::store_half_word(
+            builder,
+            sorts,
+            consts,
+            seg_state,
+            comb.store_addr,
+            comb.store_value,
+            seg_sid,
+        );
+        let sw_mem = Memory::store_word(
+            builder,
+            sorts,
+            consts,
+            seg_state,
+            comb.store_addr,
+            comb.store_value,
+            seg_sid,
+        );
 
         let mut result = seg_state;
         result = builder.ite(seg_sid, sb_cond, sb_mem, result, None);
@@ -216,7 +276,15 @@ fn sequential_memory(
         result = builder.ite(seg_sid, sw_cond, sw_mem, result, None);
 
         if config.xlen == crate::config::Xlen::X64 {
-            let sd_mem = Memory::store_double_word(builder, sorts, consts, seg_state, comb.store_addr, comb.store_value, seg_sid);
+            let sd_mem = Memory::store_double_word(
+                builder,
+                sorts,
+                consts,
+                seg_state,
+                comb.store_addr,
+                comb.store_value,
+                seg_sid,
+            );
             result = builder.ite(seg_sid, sd_cond, sd_mem, result, None);
         }
 

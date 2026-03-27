@@ -98,13 +98,7 @@ impl CoreState {
         let vaddr_top = 1u64 << (config.virtual_address_space - 1);
 
         let (initial_sp, stack_init_val) = if config.symbolic_argv && config.symbolic_argc > 0 {
-            Self::initialize_symbolic_argv(
-                builder,
-                sorts,
-                config,
-                vaddr_top,
-                word_size,
-            )
+            Self::initialize_symbolic_argv(builder, sorts, config, vaddr_top, word_size)
         } else {
             let sp = vaddr_top - word_size;
             (sp, None)
@@ -329,14 +323,22 @@ impl CoreState {
                 let val = builder.constd(
                     sorts.sid_byte,
                     byte_val as u64,
-                    Some(format!("argv[0][{}] = '{}'", str_addr - string_area_start, byte_val as char)),
+                    Some(format!(
+                        "argv[0][{}] = '{}'",
+                        str_addr - string_area_start,
+                        byte_val as char
+                    )),
                 );
                 current = builder.write(sorts.sid_stack_state, current, addr, val, None);
                 str_addr += 1;
             }
             // null terminator for argv[0]
             let addr = builder.constd(sorts.sid_stack_address, str_addr, None);
-            let null = builder.constd(sorts.sid_byte, 0, Some("argv[0] null terminator".to_string()));
+            let null = builder.constd(
+                sorts.sid_byte,
+                0,
+                Some("argv[0] null terminator".to_string()),
+            );
             current = builder.write(sorts.sid_stack_state, current, addr, null, None);
             str_addr += 1;
 
@@ -390,7 +392,11 @@ impl CoreState {
         // NULL pointer terminator for argv array
         for byte_idx in 0..word_size {
             let addr = builder.constd(sorts.sid_stack_address, ptr_addr + byte_idx, None);
-            let val = builder.constd(sorts.sid_byte, 0, Some("argv NULL terminator byte".to_string()));
+            let val = builder.constd(
+                sorts.sid_byte,
+                0,
+                Some("argv NULL terminator byte".to_string()),
+            );
             current = builder.write(sorts.sid_stack_state, current, addr, val, None);
         }
 

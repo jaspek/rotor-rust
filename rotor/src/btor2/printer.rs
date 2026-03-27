@@ -25,7 +25,8 @@ impl Btor2Printer {
 
         // Phase 1: Collect init constraints
         // For each init, find the maximum nid in the value's dependency tree
-        let mut state_must_follow: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
+        let mut state_must_follow: std::collections::HashMap<usize, usize> =
+            std::collections::HashMap::new();
         for node in builder.nodes() {
             if let Op::Init { state, value, .. } = &node.op {
                 // The state must appear after value (and all of value's deps)
@@ -99,22 +100,20 @@ impl Btor2Printer {
         out: &mut dyn Write,
     ) -> io::Result<()> {
         match &node.op {
-            Op::Sort(sort) => {
-                match sort {
-                    Sort::Bitvec { width } => {
-                        write!(out, "{} sort bitvec {}", nid, width)?;
-                    }
-                    Sort::Array { index, element } => {
-                        write!(
-                            out,
-                            "{} sort array {} {}",
-                            nid,
-                            Self::nid_of(nid_map, *index),
-                            Self::nid_of(nid_map, *element),
-                        )?;
-                    }
+            Op::Sort(sort) => match sort {
+                Sort::Bitvec { width } => {
+                    write!(out, "{} sort bitvec {}", nid, width)?;
                 }
-            }
+                Sort::Array { index, element } => {
+                    write!(
+                        out,
+                        "{} sort array {} {}",
+                        nid,
+                        Self::nid_of(nid_map, *index),
+                        Self::nid_of(nid_map, *element),
+                    )?;
+                }
+            },
             Op::Constd { sort, value } => {
                 write!(
                     out,
@@ -204,7 +203,12 @@ impl Btor2Printer {
                     width,
                 )?;
             }
-            Op::Slice { sort, arg, upper, lower } => {
+            Op::Slice {
+                sort,
+                arg,
+                upper,
+                lower,
+            } => {
                 write!(
                     out,
                     "{} slice {} {} {} {}",
@@ -225,7 +229,12 @@ impl Btor2Printer {
                     Self::nid_of(nid_map, *arg),
                 )?;
             }
-            Op::Binary { kind, sort, left, right } => {
+            Op::Binary {
+                kind,
+                sort,
+                left,
+                right,
+            } => {
                 write!(
                     out,
                     "{} {} {} {} {}",
@@ -256,7 +265,12 @@ impl Btor2Printer {
                     Self::nid_of(nid_map, *index),
                 )?;
             }
-            Op::Ite { sort, cond, then_val, else_val } => {
+            Op::Ite {
+                sort,
+                cond,
+                then_val,
+                else_val,
+            } => {
                 write!(
                     out,
                     "{} ite {} {} {} {}",
@@ -267,7 +281,12 @@ impl Btor2Printer {
                     Self::nid_of(nid_map, *else_val),
                 )?;
             }
-            Op::Write { sort, array, index, value } => {
+            Op::Write {
+                sort,
+                array,
+                index,
+                value,
+            } => {
                 write!(
                     out,
                     "{} write {} {} {} {}",

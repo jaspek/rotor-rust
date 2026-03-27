@@ -268,7 +268,8 @@ impl MachineConstants {
         } else {
             0xFFFFFFFF
         };
-        let nid_machine_word_minus_1 = builder.constd(sid_mw, minus_1, Some("machine word -1".to_string()));
+        let nid_machine_word_minus_1 =
+            builder.constd(sid_mw, minus_1, Some("machine word -1".to_string()));
 
         // Byte
         let nid_byte_0 = builder.constd(sid_byte, 0, Some("byte 0".to_string()));
@@ -277,7 +278,8 @@ impl MachineConstants {
         let nid_single_word_0 = builder.constd(sid_sw, 0, Some("single word 0".to_string()));
 
         // Instruction sizes
-        let nid_instruction_size = builder.constd(sid_mw, 4, Some("instruction size (4 bytes)".to_string()));
+        let nid_instruction_size =
+            builder.constd(sid_mw, 4, Some("instruction size (4 bytes)".to_string()));
         let nid_compressed_instruction_size = builder.constd(
             sid_mw,
             2,
@@ -290,7 +292,10 @@ impl MachineConstants {
             nid_register_addresses[i as usize] = builder.constd(
                 sid_ra,
                 i as u64,
-                Some(format!("register {}", crate::riscv::isa::REG_NAMES[i as usize])),
+                Some(format!(
+                    "register {}",
+                    crate::riscv::isa::REG_NAMES[i as usize]
+                )),
             );
         }
 
@@ -299,46 +304,133 @@ impl MachineConstants {
         let all_instrs = [
             InstrId::Unknown,
             InstrId::Ecall,
-            InstrId::Add, InstrId::Sub, InstrId::Sll, InstrId::Slt, InstrId::Sltu,
-            InstrId::Xor, InstrId::Srl, InstrId::Sra, InstrId::Or, InstrId::And,
-            InstrId::Addw, InstrId::Subw, InstrId::Sllw, InstrId::Srlw, InstrId::Sraw,
-            InstrId::Mul, InstrId::Mulh, InstrId::Mulhsu, InstrId::Mulhu,
-            InstrId::Div, InstrId::Divu, InstrId::Rem, InstrId::Remu,
-            InstrId::Mulw, InstrId::Divw, InstrId::Divuw, InstrId::Remw, InstrId::Remuw,
-            InstrId::Addi, InstrId::Slti, InstrId::Sltiu, InstrId::Xori, InstrId::Ori, InstrId::Andi,
-            InstrId::Slli, InstrId::Srli, InstrId::Srai,
-            InstrId::Addiw, InstrId::Slliw, InstrId::Srliw, InstrId::Sraiw,
-            InstrId::Lb, InstrId::Lh, InstrId::Lw, InstrId::Ld, InstrId::Lbu, InstrId::Lhu, InstrId::Lwu,
+            InstrId::Add,
+            InstrId::Sub,
+            InstrId::Sll,
+            InstrId::Slt,
+            InstrId::Sltu,
+            InstrId::Xor,
+            InstrId::Srl,
+            InstrId::Sra,
+            InstrId::Or,
+            InstrId::And,
+            InstrId::Addw,
+            InstrId::Subw,
+            InstrId::Sllw,
+            InstrId::Srlw,
+            InstrId::Sraw,
+            InstrId::Mul,
+            InstrId::Mulh,
+            InstrId::Mulhsu,
+            InstrId::Mulhu,
+            InstrId::Div,
+            InstrId::Divu,
+            InstrId::Rem,
+            InstrId::Remu,
+            InstrId::Mulw,
+            InstrId::Divw,
+            InstrId::Divuw,
+            InstrId::Remw,
+            InstrId::Remuw,
+            InstrId::Addi,
+            InstrId::Slti,
+            InstrId::Sltiu,
+            InstrId::Xori,
+            InstrId::Ori,
+            InstrId::Andi,
+            InstrId::Slli,
+            InstrId::Srli,
+            InstrId::Srai,
+            InstrId::Addiw,
+            InstrId::Slliw,
+            InstrId::Srliw,
+            InstrId::Sraiw,
+            InstrId::Lb,
+            InstrId::Lh,
+            InstrId::Lw,
+            InstrId::Ld,
+            InstrId::Lbu,
+            InstrId::Lhu,
+            InstrId::Lwu,
             InstrId::Jalr,
-            InstrId::Sb, InstrId::Sh, InstrId::Sw, InstrId::Sd,
-            InstrId::Beq, InstrId::Bne, InstrId::Blt, InstrId::Bge, InstrId::Bltu, InstrId::Bgeu,
-            InstrId::Lui, InstrId::Auipc, InstrId::Jal,
-            InstrId::CMv, InstrId::CAdd, InstrId::CJr, InstrId::CJalr,
-            InstrId::CLi, InstrId::CLui, InstrId::CAddi, InstrId::CAddiw,
-            InstrId::CAddi16sp, InstrId::CAddi4spn,
-            InstrId::CSlli, InstrId::CSrli, InstrId::CSrai, InstrId::CAndi,
-            InstrId::CSub, InstrId::CXor, InstrId::COr, InstrId::CAnd,
-            InstrId::CAddw, InstrId::CSubw,
-            InstrId::CLw, InstrId::CLd, InstrId::CSw, InstrId::CSd,
-            InstrId::CLwsp, InstrId::CLdsp, InstrId::CSwsp, InstrId::CSdsp,
-            InstrId::CBeqz, InstrId::CBnez, InstrId::CJ, InstrId::CJal,
+            InstrId::Sb,
+            InstrId::Sh,
+            InstrId::Sw,
+            InstrId::Sd,
+            InstrId::Beq,
+            InstrId::Bne,
+            InstrId::Blt,
+            InstrId::Bge,
+            InstrId::Bltu,
+            InstrId::Bgeu,
+            InstrId::Lui,
+            InstrId::Auipc,
+            InstrId::Jal,
+            InstrId::CMv,
+            InstrId::CAdd,
+            InstrId::CJr,
+            InstrId::CJalr,
+            InstrId::CLi,
+            InstrId::CLui,
+            InstrId::CAddi,
+            InstrId::CAddiw,
+            InstrId::CAddi16sp,
+            InstrId::CAddi4spn,
+            InstrId::CSlli,
+            InstrId::CSrli,
+            InstrId::CSrai,
+            InstrId::CAndi,
+            InstrId::CSub,
+            InstrId::CXor,
+            InstrId::COr,
+            InstrId::CAnd,
+            InstrId::CAddw,
+            InstrId::CSubw,
+            InstrId::CLw,
+            InstrId::CLd,
+            InstrId::CSw,
+            InstrId::CSd,
+            InstrId::CLwsp,
+            InstrId::CLdsp,
+            InstrId::CSwsp,
+            InstrId::CSdsp,
+            InstrId::CBeqz,
+            InstrId::CBnez,
+            InstrId::CJ,
+            InstrId::CJal,
         ];
 
         for (idx, instr) in all_instrs.iter().enumerate() {
-            let nid = builder.constd(
-                sid_id,
-                idx as u64,
-                Some(format!("ID_{}", instr.mnemonic())),
-            );
+            let nid = builder.constd(sid_id, idx as u64, Some(format!("ID_{}", instr.mnemonic())));
             nid_instruction_ids.insert(*instr, nid);
         }
 
         // Syscall IDs (stored in a7 register)
-        let nid_exit_syscall = builder.constd(sid_mw, crate::riscv::isa::syscalls::EXIT, Some("exit syscall id".to_string()));
-        let nid_read_syscall = builder.constd(sid_mw, crate::riscv::isa::syscalls::READ, Some("read syscall id".to_string()));
-        let nid_write_syscall = builder.constd(sid_mw, crate::riscv::isa::syscalls::WRITE, Some("write syscall id".to_string()));
-        let nid_openat_syscall = builder.constd(sid_mw, crate::riscv::isa::syscalls::OPENAT, Some("openat syscall id".to_string()));
-        let nid_brk_syscall = builder.constd(sid_mw, crate::riscv::isa::syscalls::BRK, Some("brk syscall id".to_string()));
+        let nid_exit_syscall = builder.constd(
+            sid_mw,
+            crate::riscv::isa::syscalls::EXIT,
+            Some("exit syscall id".to_string()),
+        );
+        let nid_read_syscall = builder.constd(
+            sid_mw,
+            crate::riscv::isa::syscalls::READ,
+            Some("read syscall id".to_string()),
+        );
+        let nid_write_syscall = builder.constd(
+            sid_mw,
+            crate::riscv::isa::syscalls::WRITE,
+            Some("write syscall id".to_string()),
+        );
+        let nid_openat_syscall = builder.constd(
+            sid_mw,
+            crate::riscv::isa::syscalls::OPENAT,
+            Some("openat syscall id".to_string()),
+        );
+        let nid_brk_syscall = builder.constd(
+            sid_mw,
+            crate::riscv::isa::syscalls::BRK,
+            Some("brk syscall id".to_string()),
+        );
 
         Self {
             nid_false,

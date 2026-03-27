@@ -27,14 +27,22 @@ impl Segmentation {
     ) -> Self {
         let sid = sorts.sid_machine_word;
 
-        let code_start = builder.constd(sid, binary.code_start, Some("code segment start".to_string()));
+        let code_start = builder.constd(
+            sid,
+            binary.code_start,
+            Some("code segment start".to_string()),
+        );
         let code_end = builder.constd(
             sid,
             binary.code_start + binary.code_size,
             Some("code segment end".to_string()),
         );
 
-        let data_start = builder.constd(sid, binary.data_start, Some("data segment start".to_string()));
+        let data_start = builder.constd(
+            sid,
+            binary.data_start,
+            Some("data segment start".to_string()),
+        );
         let data_end = builder.constd(
             sid,
             binary.data_start + binary.data_size,
@@ -44,14 +52,23 @@ impl Segmentation {
         // Heap starts right after data
         let heap_start_val = binary.data_start + binary.data_size;
         let heap_end_val = heap_start_val + heap_allowance;
-        let heap_start = builder.constd(sid, heap_start_val, Some("heap segment start".to_string()));
-        let heap_end = builder.constd(sid, heap_end_val, Some("heap segment end (max)".to_string()));
+        let heap_start =
+            builder.constd(sid, heap_start_val, Some("heap segment start".to_string()));
+        let heap_end = builder.constd(
+            sid,
+            heap_end_val,
+            Some("heap segment end (max)".to_string()),
+        );
 
         // Stack grows downward from top of virtual address space
         let vaddr_top = 1u64 << 31; // Use 2GB as default virtual address ceiling
         let stack_end_val = vaddr_top;
         let stack_start_val = stack_end_val - stack_allowance;
-        let stack_start = builder.constd(sid, stack_start_val, Some("stack segment start".to_string()));
+        let stack_start = builder.constd(
+            sid,
+            stack_start_val,
+            Some("stack segment start".to_string()),
+        );
         let stack_end = builder.constd(sid, stack_end_val, Some("stack segment end".to_string()));
 
         Self {
@@ -75,7 +92,12 @@ impl Segmentation {
     ) -> NodeId {
         let ge_start = builder.ugte(sorts.sid_boolean, vaddr, self.data_start, None);
         let lt_end = builder.ult(sorts.sid_boolean, vaddr, self.data_end, None);
-        builder.and_node(sorts.sid_boolean, ge_start, lt_end, Some("addr in data segment?".to_string()))
+        builder.and_node(
+            sorts.sid_boolean,
+            ge_start,
+            lt_end,
+            Some("addr in data segment?".to_string()),
+        )
     }
 
     /// Check if a virtual address falls within the heap segment.
@@ -87,7 +109,12 @@ impl Segmentation {
     ) -> NodeId {
         let ge_start = builder.ugte(sorts.sid_boolean, vaddr, self.heap_start, None);
         let lt_end = builder.ult(sorts.sid_boolean, vaddr, self.heap_end, None);
-        builder.and_node(sorts.sid_boolean, ge_start, lt_end, Some("addr in heap segment?".to_string()))
+        builder.and_node(
+            sorts.sid_boolean,
+            ge_start,
+            lt_end,
+            Some("addr in heap segment?".to_string()),
+        )
     }
 
     /// Check if a virtual address falls within the stack segment.
@@ -99,7 +126,12 @@ impl Segmentation {
     ) -> NodeId {
         let ge_start = builder.ugte(sorts.sid_boolean, vaddr, self.stack_start, None);
         let lt_end = builder.ult(sorts.sid_boolean, vaddr, self.stack_end, None);
-        builder.and_node(sorts.sid_boolean, ge_start, lt_end, Some("addr in stack segment?".to_string()))
+        builder.and_node(
+            sorts.sid_boolean,
+            ge_start,
+            lt_end,
+            Some("addr in stack segment?".to_string()),
+        )
     }
 
     /// Check if a virtual address is in any writable segment (data, heap, or stack).
@@ -160,8 +192,20 @@ impl Segmentation {
         let in_heap = self.is_in_heap_segment(builder, sorts, vaddr);
 
         let mut result = data_state; // default
-        result = builder.ite(array_sid, in_heap, heap_state, result, Some("heap segment?".to_string()));
-        result = builder.ite(array_sid, in_stack, stack_state, result, Some("stack segment?".to_string()));
+        result = builder.ite(
+            array_sid,
+            in_heap,
+            heap_state,
+            result,
+            Some("heap segment?".to_string()),
+        );
+        result = builder.ite(
+            array_sid,
+            in_stack,
+            stack_state,
+            result,
+            Some("stack segment?".to_string()),
+        );
         result
     }
 }

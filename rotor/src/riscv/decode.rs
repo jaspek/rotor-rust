@@ -26,17 +26,35 @@ pub fn extract_funct6(builder: &mut Btor2Builder, sorts: &MachineSorts, ir: Node
 
 /// Extract rd field (bits [11:7])
 pub fn extract_rd(builder: &mut Btor2Builder, sorts: &MachineSorts, ir: NodeId) -> NodeId {
-    builder.slice(sorts.sid_register_address, ir, 11, 7, Some("rd".to_string()))
+    builder.slice(
+        sorts.sid_register_address,
+        ir,
+        11,
+        7,
+        Some("rd".to_string()),
+    )
 }
 
 /// Extract rs1 field (bits [19:15])
 pub fn extract_rs1(builder: &mut Btor2Builder, sorts: &MachineSorts, ir: NodeId) -> NodeId {
-    builder.slice(sorts.sid_register_address, ir, 19, 15, Some("rs1".to_string()))
+    builder.slice(
+        sorts.sid_register_address,
+        ir,
+        19,
+        15,
+        Some("rs1".to_string()),
+    )
 }
 
 /// Extract rs2 field (bits [24:20])
 pub fn extract_rs2(builder: &mut Btor2Builder, sorts: &MachineSorts, ir: NodeId) -> NodeId {
-    builder.slice(sorts.sid_register_address, ir, 24, 20, Some("rs2".to_string()))
+    builder.slice(
+        sorts.sid_register_address,
+        ir,
+        24,
+        20,
+        Some("rs2".to_string()),
+    )
 }
 
 /// Extract I-immediate (bits [31:20], sign-extended)
@@ -64,7 +82,12 @@ pub fn extract_s_imm(
 ) -> NodeId {
     let imm11_5 = builder.slice(sorts.sid_7bit, ir, 31, 25, Some("S-imm[11:5]".to_string()));
     let imm4_0 = builder.slice(sorts.sid_5bit, ir, 11, 7, Some("S-imm[4:0]".to_string()));
-    let imm12 = builder.concat(sorts.sid_12bit, imm11_5, imm4_0, Some("S-imm[11:0]".to_string()));
+    let imm12 = builder.concat(
+        sorts.sid_12bit,
+        imm11_5,
+        imm4_0,
+        Some("S-imm[11:0]".to_string()),
+    );
     builder.sext(
         sorts.sid_machine_word,
         imm12,
@@ -81,7 +104,13 @@ pub fn extract_sb_imm(
     config: &Config,
     ir: NodeId,
 ) -> NodeId {
-    let bit12 = builder.slice(sorts.sid_boolean, ir, 31, 31, Some("SB-imm[12]".to_string()));
+    let bit12 = builder.slice(
+        sorts.sid_boolean,
+        ir,
+        31,
+        31,
+        Some("SB-imm[12]".to_string()),
+    );
     let bit11 = builder.slice(sorts.sid_boolean, ir, 7, 7, Some("SB-imm[11]".to_string()));
     let bits10_5 = builder.slice(sorts.sid_6bit, ir, 30, 25, Some("SB-imm[10:5]".to_string()));
     let bits4_1 = builder.slice(sorts.sid_4bit, ir, 11, 8, Some("SB-imm[4:1]".to_string()));
@@ -107,9 +136,20 @@ pub fn extract_u_imm(
     config: &Config,
     ir: NodeId,
 ) -> NodeId {
-    let imm20 = builder.slice(sorts.sid_20bit, ir, 31, 12, Some("U-imm[31:12]".to_string()));
+    let imm20 = builder.slice(
+        sorts.sid_20bit,
+        ir,
+        31,
+        12,
+        Some("U-imm[31:12]".to_string()),
+    );
     let zeros = builder.constd(sorts.sid_12bit, 0, Some("12 zero bits".to_string()));
-    let imm32 = builder.concat(sorts.sid_single_word, imm20, zeros, Some("U-imm << 12".to_string()));
+    let imm32 = builder.concat(
+        sorts.sid_single_word,
+        imm20,
+        zeros,
+        Some("U-imm << 12".to_string()),
+    );
 
     if config.machine_word_bits() > 32 {
         builder.sext(
@@ -131,10 +171,34 @@ pub fn extract_uj_imm(
     config: &Config,
     ir: NodeId,
 ) -> NodeId {
-    let bit20 = builder.slice(sorts.sid_boolean, ir, 31, 31, Some("UJ-imm[20]".to_string()));
-    let bits19_12 = builder.slice(sorts.sid_8bit, ir, 19, 12, Some("UJ-imm[19:12]".to_string()));
-    let bit11 = builder.slice(sorts.sid_boolean, ir, 20, 20, Some("UJ-imm[11]".to_string()));
-    let bits10_1 = builder.slice(sorts.sid_10bit, ir, 30, 21, Some("UJ-imm[10:1]".to_string()));
+    let bit20 = builder.slice(
+        sorts.sid_boolean,
+        ir,
+        31,
+        31,
+        Some("UJ-imm[20]".to_string()),
+    );
+    let bits19_12 = builder.slice(
+        sorts.sid_8bit,
+        ir,
+        19,
+        12,
+        Some("UJ-imm[19:12]".to_string()),
+    );
+    let bit11 = builder.slice(
+        sorts.sid_boolean,
+        ir,
+        20,
+        20,
+        Some("UJ-imm[11]".to_string()),
+    );
+    let bits10_1 = builder.slice(
+        sorts.sid_10bit,
+        ir,
+        30,
+        21,
+        Some("UJ-imm[10:1]".to_string()),
+    );
 
     let top = builder.concat(sorts.sid_9bit, bit20, bits19_12, None);
     let mid = builder.concat(sorts.sid_10bit, top, bit11, None);
@@ -168,7 +232,12 @@ pub fn decode_instruction(
 
     // Decode LUI
     let lui_opcode = builder.constd(sorts.sid_opcode, super::isa::opcodes::LUI as u64, None);
-    let is_lui = builder.eq_node(bool_sid, opcode, lui_opcode, Some("opcode == LUI".to_string()));
+    let is_lui = builder.eq_node(
+        bool_sid,
+        opcode,
+        lui_opcode,
+        Some("opcode == LUI".to_string()),
+    );
     let nid_lui = consts.nid_instr_id(InstrId::Lui);
 
     // Decode AUIPC
@@ -235,7 +304,13 @@ pub fn decode_instruction(
     result = builder.ite(id_sid, is_jalr, nid_jalr, result, None);
     result = builder.ite(id_sid, is_jal, nid_jal, result, None);
     result = builder.ite(id_sid, is_auipc, nid_auipc, result, None);
-    result = builder.ite(id_sid, is_lui, nid_lui, result, Some("instruction decode".to_string()));
+    result = builder.ite(
+        id_sid,
+        is_lui,
+        nid_lui,
+        result,
+        Some("instruction decode".to_string()),
+    );
 
     result
 }
@@ -265,7 +340,13 @@ fn decode_funct3_group(
         result = builder.ite(id_sid, m, nid, result, None);
     }
 
-    builder.ite(id_sid, is_group, result, nid_unknown, Some(comment.to_string()))
+    builder.ite(
+        id_sid,
+        is_group,
+        result,
+        nid_unknown,
+        Some(comment.to_string()),
+    )
 }
 
 fn decode_branches(
@@ -276,7 +357,11 @@ fn decode_branches(
     funct3: NodeId,
 ) -> NodeId {
     decode_funct3_group(
-        builder, sorts, consts, opcode, funct3,
+        builder,
+        sorts,
+        consts,
+        opcode,
+        funct3,
         super::isa::opcodes::BRANCH as u64,
         &[
             (super::isa::funct3::BEQ, InstrId::Beq),
@@ -310,7 +395,11 @@ fn decode_loads(
         mappings.push((super::isa::funct3::LWU, InstrId::Lwu));
     }
     decode_funct3_group(
-        builder, sorts, consts, opcode, funct3,
+        builder,
+        sorts,
+        consts,
+        opcode,
+        funct3,
         super::isa::opcodes::LOAD as u64,
         &mappings,
         "load decode",
@@ -334,7 +423,11 @@ fn decode_stores(
         mappings.push((super::isa::funct3::SD, InstrId::Sd));
     }
     decode_funct3_group(
-        builder, sorts, consts, opcode, funct3,
+        builder,
+        sorts,
+        consts,
+        opcode,
+        funct3,
         super::isa::opcodes::STORE as u64,
         &mappings,
         "store decode",
@@ -424,7 +517,13 @@ fn decode_op_imm(
         result = builder.ite(id_sid, m, nid, result, None);
     }
 
-    builder.ite(id_sid, is_imm, result, nid_unknown, Some("OP-IMM decode".to_string()))
+    builder.ite(
+        id_sid,
+        is_imm,
+        result,
+        nid_unknown,
+        Some("OP-IMM decode".to_string()),
+    )
 }
 
 fn decode_op(
@@ -475,12 +574,24 @@ fn decode_op(
     let f3_add = builder.constd(sorts.sid_funct3, super::isa::funct3::ADD_SUB as u64, None);
     let is_f3_add = builder.eq_node(bool_sid, funct3, f3_add, None);
     let is_sub = builder.and_node(bool_sid, is_f7_sub, is_f3_add, None);
-    result = builder.ite(id_sid, is_sub, consts.nid_instr_id(InstrId::Sub), result, None);
+    result = builder.ite(
+        id_sid,
+        is_sub,
+        consts.nid_instr_id(InstrId::Sub),
+        result,
+        None,
+    );
 
     let f3_sr = builder.constd(sorts.sid_funct3, super::isa::funct3::SRL_SRA as u64, None);
     let is_f3_sr = builder.eq_node(bool_sid, funct3, f3_sr, None);
     let is_sra = builder.and_node(bool_sid, is_f7_sub, is_f3_sr, None);
-    result = builder.ite(id_sid, is_sra, consts.nid_instr_id(InstrId::Sra), result, None);
+    result = builder.ite(
+        id_sid,
+        is_sra,
+        consts.nid_instr_id(InstrId::Sra),
+        result,
+        None,
+    );
 
     // M extension
     if config.enable_m {
@@ -502,7 +613,13 @@ fn decode_op(
         }
     }
 
-    builder.ite(id_sid, is_op, result, nid_unknown, Some("OP decode".to_string()))
+    builder.ite(
+        id_sid,
+        is_op,
+        result,
+        nid_unknown,
+        Some("OP decode".to_string()),
+    )
 }
 
 fn decode_op_imm_32(
@@ -517,7 +634,11 @@ fn decode_op_imm_32(
     let id_sid = sorts.sid_instruction_id;
     let nid_unknown = consts.nid_instr_id(InstrId::Unknown);
 
-    let opc = builder.constd(sorts.sid_opcode, super::isa::opcodes::OP_IMM_32 as u64, None);
+    let opc = builder.constd(
+        sorts.sid_opcode,
+        super::isa::opcodes::OP_IMM_32 as u64,
+        None,
+    );
     let is_imm32 = builder.eq_node(bool_sid, opcode, opc, None);
 
     let f7_zero = builder.constd(sorts.sid_funct7, super::isa::funct7::ZERO as u64, None);
@@ -529,21 +650,51 @@ fn decode_op_imm_32(
 
     let f3_add = builder.constd(sorts.sid_funct3, super::isa::funct3::ADD_SUB as u64, None);
     let is_addiw = builder.eq_node(bool_sid, funct3, f3_add, None);
-    result = builder.ite(id_sid, is_addiw, consts.nid_instr_id(InstrId::Addiw), result, None);
+    result = builder.ite(
+        id_sid,
+        is_addiw,
+        consts.nid_instr_id(InstrId::Addiw),
+        result,
+        None,
+    );
 
     let f3_sll = builder.constd(sorts.sid_funct3, super::isa::funct3::SLL as u64, None);
     let is_f3_sll = builder.eq_node(bool_sid, funct3, f3_sll, None);
     let is_slliw = builder.and_node(bool_sid, is_f3_sll, is_f7_zero, None);
-    result = builder.ite(id_sid, is_slliw, consts.nid_instr_id(InstrId::Slliw), result, None);
+    result = builder.ite(
+        id_sid,
+        is_slliw,
+        consts.nid_instr_id(InstrId::Slliw),
+        result,
+        None,
+    );
 
     let f3_sr = builder.constd(sorts.sid_funct3, super::isa::funct3::SRL_SRA as u64, None);
     let is_f3_sr = builder.eq_node(bool_sid, funct3, f3_sr, None);
     let is_srliw = builder.and_node(bool_sid, is_f3_sr, is_f7_zero, None);
-    result = builder.ite(id_sid, is_srliw, consts.nid_instr_id(InstrId::Srliw), result, None);
+    result = builder.ite(
+        id_sid,
+        is_srliw,
+        consts.nid_instr_id(InstrId::Srliw),
+        result,
+        None,
+    );
     let is_sraiw = builder.and_node(bool_sid, is_f3_sr, is_f7_sra, None);
-    result = builder.ite(id_sid, is_sraiw, consts.nid_instr_id(InstrId::Sraiw), result, None);
+    result = builder.ite(
+        id_sid,
+        is_sraiw,
+        consts.nid_instr_id(InstrId::Sraiw),
+        result,
+        None,
+    );
 
-    builder.ite(id_sid, is_imm32, result, nid_unknown, Some("OP-IMM-32 decode".to_string()))
+    builder.ite(
+        id_sid,
+        is_imm32,
+        result,
+        nid_unknown,
+        Some("OP-IMM-32 decode".to_string()),
+    )
 }
 
 fn decode_op_32(
@@ -571,7 +722,11 @@ fn decode_op_32(
 
     let mut result = nid_unknown;
 
-    for (f3_val, instr) in [(super::isa::funct3::ADD_SUB, InstrId::Addw), (super::isa::funct3::SLL, InstrId::Sllw), (super::isa::funct3::SRL_SRA, InstrId::Srlw)] {
+    for (f3_val, instr) in [
+        (super::isa::funct3::ADD_SUB, InstrId::Addw),
+        (super::isa::funct3::SLL, InstrId::Sllw),
+        (super::isa::funct3::SRL_SRA, InstrId::Srlw),
+    ] {
         let f3 = builder.constd(sorts.sid_funct3, f3_val as u64, None);
         let is_f3 = builder.eq_node(bool_sid, funct3, f3, None);
         let cond = builder.and_node(bool_sid, is_f7_zero, is_f3, None);
@@ -581,12 +736,24 @@ fn decode_op_32(
     let f3_add = builder.constd(sorts.sid_funct3, super::isa::funct3::ADD_SUB as u64, None);
     let is_f3_add = builder.eq_node(bool_sid, funct3, f3_add, None);
     let is_subw = builder.and_node(bool_sid, is_f7_sub, is_f3_add, None);
-    result = builder.ite(id_sid, is_subw, consts.nid_instr_id(InstrId::Subw), result, None);
+    result = builder.ite(
+        id_sid,
+        is_subw,
+        consts.nid_instr_id(InstrId::Subw),
+        result,
+        None,
+    );
 
     let f3_sr = builder.constd(sorts.sid_funct3, super::isa::funct3::SRL_SRA as u64, None);
     let is_f3_sr = builder.eq_node(bool_sid, funct3, f3_sr, None);
     let is_sraw = builder.and_node(bool_sid, is_f7_sub, is_f3_sr, None);
-    result = builder.ite(id_sid, is_sraw, consts.nid_instr_id(InstrId::Sraw), result, None);
+    result = builder.ite(
+        id_sid,
+        is_sraw,
+        consts.nid_instr_id(InstrId::Sraw),
+        result,
+        None,
+    );
 
     if config.enable_m {
         for (f3_val, instr) in [
@@ -603,5 +770,11 @@ fn decode_op_32(
         }
     }
 
-    builder.ite(id_sid, is_op32, result, nid_unknown, Some("OP-32 decode".to_string()))
+    builder.ite(
+        id_sid,
+        is_op32,
+        result,
+        nid_unknown,
+        Some("OP-32 decode".to_string()),
+    )
 }

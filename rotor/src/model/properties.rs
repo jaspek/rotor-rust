@@ -53,7 +53,11 @@ pub fn rotor_properties(
             Some("exit with non-zero code".to_string()),
         );
 
-        builder.bad(bad_exit, "bad-exit-code", Some("exit(a0) where a0 != 0".to_string()));
+        builder.bad(
+            bad_exit,
+            "bad-exit-code",
+            Some("exit(a0) where a0 != 0".to_string()),
+        );
     }
 
     // ===== GOOD EXIT CODE =====
@@ -91,7 +95,11 @@ pub fn rotor_properties(
             Some("exit with zero code".to_string()),
         );
 
-        builder.bad(good_exit, "good-exit-code", Some("exit(0) reached".to_string()));
+        builder.bad(
+            good_exit,
+            "good-exit-code",
+            Some("exit(0) reached".to_string()),
+        );
     }
 
     // ===== EXIT CODES (any exit) =====
@@ -107,7 +115,11 @@ pub fn rotor_properties(
         let syscall = KernelState::decode_syscall(builder, sorts, consts, a7_val);
 
         let is_exit_ecall = builder.and_node(bool_sid, comb.is_ecall, syscall.is_exit, None);
-        builder.bad(is_exit_ecall, "exit-ecall", Some("any exit syscall reached".to_string()));
+        builder.bad(
+            is_exit_ecall,
+            "exit-ecall",
+            Some("any exit syscall reached".to_string()),
+        );
     }
 
     // ===== DIVISION BY ZERO =====

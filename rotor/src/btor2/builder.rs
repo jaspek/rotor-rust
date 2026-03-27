@@ -10,6 +10,12 @@ pub struct Btor2Builder {
     enable_cse: bool,
 }
 
+impl Default for Btor2Builder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Btor2Builder {
     pub fn new() -> Self {
         Self {
@@ -199,55 +205,59 @@ impl Btor2Builder {
         lower: u32,
         comment: impl Into<Option<String>>,
     ) -> NodeId {
-        self.intern(Op::Slice { sort, arg, upper, lower }, comment.into())
+        self.intern(
+            Op::Slice {
+                sort,
+                arg,
+                upper,
+                lower,
+            },
+            comment.into(),
+        )
     }
 
     // --- Unary ---
 
-    pub fn not(
-        &mut self,
-        sort: NodeId,
-        arg: NodeId,
-        comment: impl Into<Option<String>>,
-    ) -> NodeId {
+    pub fn not(&mut self, sort: NodeId, arg: NodeId, comment: impl Into<Option<String>>) -> NodeId {
         self.intern(
-            Op::Unary { kind: UnaryOp::Not, sort, arg },
+            Op::Unary {
+                kind: UnaryOp::Not,
+                sort,
+                arg,
+            },
             comment.into(),
         )
     }
 
-    pub fn inc(
-        &mut self,
-        sort: NodeId,
-        arg: NodeId,
-        comment: impl Into<Option<String>>,
-    ) -> NodeId {
+    pub fn inc(&mut self, sort: NodeId, arg: NodeId, comment: impl Into<Option<String>>) -> NodeId {
         self.intern(
-            Op::Unary { kind: UnaryOp::Inc, sort, arg },
+            Op::Unary {
+                kind: UnaryOp::Inc,
+                sort,
+                arg,
+            },
             comment.into(),
         )
     }
 
-    pub fn dec(
-        &mut self,
-        sort: NodeId,
-        arg: NodeId,
-        comment: impl Into<Option<String>>,
-    ) -> NodeId {
+    pub fn dec(&mut self, sort: NodeId, arg: NodeId, comment: impl Into<Option<String>>) -> NodeId {
         self.intern(
-            Op::Unary { kind: UnaryOp::Dec, sort, arg },
+            Op::Unary {
+                kind: UnaryOp::Dec,
+                sort,
+                arg,
+            },
             comment.into(),
         )
     }
 
-    pub fn neg(
-        &mut self,
-        sort: NodeId,
-        arg: NodeId,
-        comment: impl Into<Option<String>>,
-    ) -> NodeId {
+    pub fn neg(&mut self, sort: NodeId, arg: NodeId, comment: impl Into<Option<String>>) -> NodeId {
         self.intern(
-            Op::Unary { kind: UnaryOp::Neg, sort, arg },
+            Op::Unary {
+                kind: UnaryOp::Neg,
+                sort,
+                arg,
+            },
             comment.into(),
         )
     }
@@ -262,7 +272,15 @@ impl Btor2Builder {
         right: NodeId,
         comment: impl Into<Option<String>>,
     ) -> NodeId {
-        self.intern(Op::Binary { kind, sort, left, right }, comment.into())
+        self.intern(
+            Op::Binary {
+                kind,
+                sort,
+                left,
+                right,
+            },
+            comment.into(),
+        )
     }
 
     // Convenience methods for common binary ops
@@ -541,7 +559,12 @@ impl Btor2Builder {
         comment: impl Into<Option<String>>,
     ) -> NodeId {
         self.intern(
-            Op::Ite { sort, cond, then_val, else_val },
+            Op::Ite {
+                sort,
+                cond,
+                then_val,
+                else_val,
+            },
             comment.into(),
         )
     }
@@ -555,7 +578,12 @@ impl Btor2Builder {
         comment: impl Into<Option<String>>,
     ) -> NodeId {
         self.intern(
-            Op::Write { sort, array, index, value },
+            Op::Write {
+                sort,
+                array,
+                index,
+                value,
+            },
             comment.into(),
         )
     }

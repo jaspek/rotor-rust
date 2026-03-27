@@ -68,7 +68,13 @@ pub fn rotor_combinational(
     let is_compressed = builder.not(bool_sid, is_full, Some("is compressed?".to_string()));
 
     // Extract compressed instruction (lower 16 bits)
-    let c_ir = builder.slice(sorts.sid_half_word, ir, 15, 0, Some("compressed IR".to_string()));
+    let c_ir = builder.slice(
+        sorts.sid_half_word,
+        ir,
+        15,
+        0,
+        Some("compressed IR".to_string()),
+    );
 
     // ===== DECODE =====
     let full_instr_id = decode::decode_instruction(builder, sorts, consts, config, ir);
@@ -92,8 +98,20 @@ pub fn rotor_combinational(
     let rs1_addr = decode::extract_rs1(builder, sorts, ir);
     let rs2_addr = decode::extract_rs2(builder, sorts, ir);
 
-    let rs1_val = RegisterFile::load_register(builder, sorts, core.register_file_state, rs1_addr, Some("rs1 value".to_string()));
-    let rs2_val = RegisterFile::load_register(builder, sorts, core.register_file_state, rs2_addr, Some("rs2 value".to_string()));
+    let rs1_val = RegisterFile::load_register(
+        builder,
+        sorts,
+        core.register_file_state,
+        rs1_addr,
+        Some("rs1 value".to_string()),
+    );
+    let rs2_val = RegisterFile::load_register(
+        builder,
+        sorts,
+        core.register_file_state,
+        rs2_addr,
+        Some("rs2 value".to_string()),
+    );
 
     // ===== IMMEDIATES =====
     let i_imm = decode::extract_i_imm(builder, sorts, config, ir);
@@ -104,17 +122,43 @@ pub fn rotor_combinational(
 
     // ===== DATA FLOW (compute rd value) =====
     let _unknown_id = consts.nid_instr_id(InstrId::Unknown);
-    let pc_plus_4 = builder.add(mw_sid, core.pc_state, consts.nid_instruction_size, Some("PC + 4".to_string()));
-    let pc_plus_2 = builder.add(mw_sid, core.pc_state, consts.nid_compressed_instruction_size, Some("PC + 2".to_string()));
+    let pc_plus_4 = builder.add(
+        mw_sid,
+        core.pc_state,
+        consts.nid_instruction_size,
+        Some("PC + 4".to_string()),
+    );
+    let pc_plus_2 = builder.add(
+        mw_sid,
+        core.pc_state,
+        consts.nid_compressed_instruction_size,
+        Some("PC + 2".to_string()),
+    );
     let next_seq_pc = if config.enable_c {
-        builder.ite(mw_sid, is_compressed, pc_plus_2, pc_plus_4, Some("next sequential PC".to_string()))
+        builder.ite(
+            mw_sid,
+            is_compressed,
+            pc_plus_2,
+            pc_plus_4,
+            Some("next sequential PC".to_string()),
+        )
     } else {
         pc_plus_4
     };
 
     // Compute address for loads/stores: rs1 + I-immediate (or S-immediate for stores)
-    let load_addr = builder.add(mw_sid, rs1_val, i_imm, Some("rs1 + I-imm (load addr)".to_string()));
-    let store_addr = builder.add(mw_sid, rs1_val, s_imm, Some("rs1 + S-imm (store addr)".to_string()));
+    let load_addr = builder.add(
+        mw_sid,
+        rs1_val,
+        i_imm,
+        Some("rs1 + I-imm (load addr)".to_string()),
+    );
+    let store_addr = builder.add(
+        mw_sid,
+        rs1_val,
+        s_imm,
+        Some("rs1 + S-imm (store addr)".to_string()),
+    );
 
     // Select the appropriate memory segment for load address
     let load_memory = core.segmentation.select_segment(
@@ -134,11 +178,23 @@ pub fn rotor_combinational(
     let sll_result = builder.sll(mw_sid, rs1_val, rs2_val, None);
     let slt_result = {
         let cmp = builder.slt(bool_sid, rs1_val, rs2_val, None);
-        builder.ite(mw_sid, cmp, consts.nid_machine_word_1, consts.nid_machine_word_0, Some("slt result".to_string()))
+        builder.ite(
+            mw_sid,
+            cmp,
+            consts.nid_machine_word_1,
+            consts.nid_machine_word_0,
+            Some("slt result".to_string()),
+        )
     };
     let sltu_result = {
         let cmp = builder.ult(bool_sid, rs1_val, rs2_val, None);
-        builder.ite(mw_sid, cmp, consts.nid_machine_word_1, consts.nid_machine_word_0, Some("sltu result".to_string()))
+        builder.ite(
+            mw_sid,
+            cmp,
+            consts.nid_machine_word_1,
+            consts.nid_machine_word_0,
+            Some("sltu result".to_string()),
+        )
     };
     let xor_result = builder.xor_node(mw_sid, rs1_val, rs2_val, None);
     let srl_result = builder.srl(mw_sid, rs1_val, rs2_val, None);
@@ -150,11 +206,23 @@ pub fn rotor_combinational(
     let addi_result = builder.add(mw_sid, rs1_val, i_imm, None);
     let slti_result = {
         let cmp = builder.slt(bool_sid, rs1_val, i_imm, None);
-        builder.ite(mw_sid, cmp, consts.nid_machine_word_1, consts.nid_machine_word_0, None)
+        builder.ite(
+            mw_sid,
+            cmp,
+            consts.nid_machine_word_1,
+            consts.nid_machine_word_0,
+            None,
+        )
     };
     let sltiu_result = {
         let cmp = builder.ult(bool_sid, rs1_val, i_imm, None);
-        builder.ite(mw_sid, cmp, consts.nid_machine_word_1, consts.nid_machine_word_0, None)
+        builder.ite(
+            mw_sid,
+            cmp,
+            consts.nid_machine_word_1,
+            consts.nid_machine_word_0,
+            None,
+        )
     };
     let xori_result = builder.xor_node(mw_sid, rs1_val, i_imm, None);
     let ori_result = builder.or_node(mw_sid, rs1_val, i_imm, None);
@@ -182,20 +250,83 @@ pub fn rotor_combinational(
     let jalr_rd_value = next_seq_pc;
 
     // Load results - build for each load type
-    let lb_result = Memory::load_value(builder, sorts, consts, load_memory, load_addr, 1, true, config);
-    let lbu_result = Memory::load_value(builder, sorts, consts, load_memory, load_addr, 1, false, config);
-    let lh_result = Memory::load_value(builder, sorts, consts, load_memory, load_addr, 2, true, config);
-    let lhu_result = Memory::load_value(builder, sorts, consts, load_memory, load_addr, 2, false, config);
-    let lw_result = Memory::load_value(builder, sorts, consts, load_memory, load_addr, 4, true, config);
+    let lb_result = Memory::load_value(
+        builder,
+        sorts,
+        consts,
+        load_memory,
+        load_addr,
+        1,
+        true,
+        config,
+    );
+    let lbu_result = Memory::load_value(
+        builder,
+        sorts,
+        consts,
+        load_memory,
+        load_addr,
+        1,
+        false,
+        config,
+    );
+    let lh_result = Memory::load_value(
+        builder,
+        sorts,
+        consts,
+        load_memory,
+        load_addr,
+        2,
+        true,
+        config,
+    );
+    let lhu_result = Memory::load_value(
+        builder,
+        sorts,
+        consts,
+        load_memory,
+        load_addr,
+        2,
+        false,
+        config,
+    );
+    let lw_result = Memory::load_value(
+        builder,
+        sorts,
+        consts,
+        load_memory,
+        load_addr,
+        4,
+        true,
+        config,
+    );
 
     let lwu_result = if config.xlen == Xlen::X64 {
-        Memory::load_value(builder, sorts, consts, load_memory, load_addr, 4, false, config)
+        Memory::load_value(
+            builder,
+            sorts,
+            consts,
+            load_memory,
+            load_addr,
+            4,
+            false,
+            config,
+        )
     } else {
         consts.nid_machine_word_0
     };
 
     let ld_result = if config.xlen == Xlen::X64 {
-        Memory::load_value(builder, sorts, consts, load_memory, load_addr, 8, false, config)
+        Memory::load_value(
+            builder,
+            sorts,
+            consts,
+            load_memory,
+            load_addr,
+            8,
+            false,
+            config,
+        )
     } else {
         consts.nid_machine_word_0
     };
@@ -222,21 +353,46 @@ pub fn rotor_combinational(
         let b = builder.or_node(bool_sid, d3, d4, None);
         builder.or_node(bool_sid, a, b, Some("is div/rem instruction?".to_string()))
     };
-    let division_by_zero = builder.and_node(bool_sid, is_div, rs2_is_zero, Some("division by zero?".to_string()));
+    let division_by_zero = builder.and_node(
+        bool_sid,
+        is_div,
+        rs2_is_zero,
+        Some("division by zero?".to_string()),
+    );
 
     // Invalid address check for loads/stores
-    let load_valid = core.segmentation.is_valid_read_address(builder, sorts, load_addr);
-    let store_valid = core.segmentation.is_valid_write_address(builder, sorts, store_addr);
+    let load_valid = core
+        .segmentation
+        .is_valid_read_address(builder, sorts, load_addr);
+    let store_valid = core
+        .segmentation
+        .is_valid_write_address(builder, sorts, store_addr);
     let is_load_instr = {
-        let ids = [InstrId::Lb, InstrId::Lh, InstrId::Lw, InstrId::Lbu, InstrId::Lhu];
+        let ids = [
+            InstrId::Lb,
+            InstrId::Lh,
+            InstrId::Lw,
+            InstrId::Lbu,
+            InstrId::Lhu,
+        ];
         let mut acc = consts.nid_false;
         for id in ids {
             let eq = builder.eq_node(bool_sid, instruction_id, consts.nid_instr_id(id), None);
             acc = builder.or_node(bool_sid, acc, eq, None);
         }
         if config.xlen == Xlen::X64 {
-            let ld = builder.eq_node(bool_sid, instruction_id, consts.nid_instr_id(InstrId::Ld), None);
-            let lwu = builder.eq_node(bool_sid, instruction_id, consts.nid_instr_id(InstrId::Lwu), None);
+            let ld = builder.eq_node(
+                bool_sid,
+                instruction_id,
+                consts.nid_instr_id(InstrId::Ld),
+                None,
+            );
+            let lwu = builder.eq_node(
+                bool_sid,
+                instruction_id,
+                consts.nid_instr_id(InstrId::Lwu),
+                None,
+            );
             acc = builder.or_node(bool_sid, acc, ld, None);
             acc = builder.or_node(bool_sid, acc, lwu, None);
         }
@@ -250,7 +406,12 @@ pub fn rotor_combinational(
             acc = builder.or_node(bool_sid, acc, eq, None);
         }
         if config.xlen == Xlen::X64 {
-            let sd = builder.eq_node(bool_sid, instruction_id, consts.nid_instr_id(InstrId::Sd), None);
+            let sd = builder.eq_node(
+                bool_sid,
+                instruction_id,
+                consts.nid_instr_id(InstrId::Sd),
+                None,
+            );
             acc = builder.or_node(bool_sid, acc, sd, None);
         }
         acc
@@ -259,16 +420,31 @@ pub fn rotor_combinational(
     let load_invalid = builder.and_node(bool_sid, is_load_instr, not_load_valid, None);
     let not_store_valid = builder.not(bool_sid, store_valid, None);
     let store_invalid = builder.and_node(bool_sid, is_store_instr, not_store_valid, None);
-    let invalid_address = builder.or_node(bool_sid, load_invalid, store_invalid, Some("invalid memory access?".to_string()));
+    let invalid_address = builder.or_node(
+        bool_sid,
+        load_invalid,
+        store_invalid,
+        Some("invalid memory access?".to_string()),
+    );
 
     // ===== BUILD RD VALUE ITE CHAIN =====
     let mut rd_value = consts.nid_machine_word_0;
 
     // Loads
     if config.xlen == Xlen::X64 {
-        let is_ld = builder.eq_node(bool_sid, instruction_id, consts.nid_instr_id(InstrId::Ld), None);
+        let is_ld = builder.eq_node(
+            bool_sid,
+            instruction_id,
+            consts.nid_instr_id(InstrId::Ld),
+            None,
+        );
         rd_value = builder.ite(mw_sid, is_ld, ld_result, rd_value, None);
-        let is_lwu = builder.eq_node(bool_sid, instruction_id, consts.nid_instr_id(InstrId::Lwu), None);
+        let is_lwu = builder.eq_node(
+            bool_sid,
+            instruction_id,
+            consts.nid_instr_id(InstrId::Lwu),
+            None,
+        );
         rd_value = builder.ite(mw_sid, is_lwu, lwu_result, rd_value, None);
     }
     let load_instrs = [
@@ -334,15 +510,35 @@ pub fn rotor_combinational(
     }
 
     // U-type
-    let lui_cond = builder.eq_node(bool_sid, instruction_id, consts.nid_instr_id(InstrId::Lui), None);
+    let lui_cond = builder.eq_node(
+        bool_sid,
+        instruction_id,
+        consts.nid_instr_id(InstrId::Lui),
+        None,
+    );
     rd_value = builder.ite(mw_sid, lui_cond, lui_result, rd_value, None);
-    let auipc_cond = builder.eq_node(bool_sid, instruction_id, consts.nid_instr_id(InstrId::Auipc), None);
+    let auipc_cond = builder.eq_node(
+        bool_sid,
+        instruction_id,
+        consts.nid_instr_id(InstrId::Auipc),
+        None,
+    );
     rd_value = builder.ite(mw_sid, auipc_cond, auipc_result, rd_value, None);
 
     // JAL / JALR (write return address to rd)
-    let jal_cond = builder.eq_node(bool_sid, instruction_id, consts.nid_instr_id(InstrId::Jal), None);
+    let jal_cond = builder.eq_node(
+        bool_sid,
+        instruction_id,
+        consts.nid_instr_id(InstrId::Jal),
+        None,
+    );
     rd_value = builder.ite(mw_sid, jal_cond, jal_rd_value, rd_value, None);
-    let jalr_cond = builder.eq_node(bool_sid, instruction_id, consts.nid_instr_id(InstrId::Jalr), None);
+    let jalr_cond = builder.eq_node(
+        bool_sid,
+        instruction_id,
+        consts.nid_instr_id(InstrId::Jalr),
+        None,
+    );
     rd_value = builder.ite(mw_sid, jalr_cond, jalr_rd_value, rd_value, None);
 
     // ===== CONTROL FLOW (compute next PC) =====
@@ -354,13 +550,28 @@ pub fn rotor_combinational(
     let bltu_cond = builder.ult(bool_sid, rs1_val, rs2_val, None);
     let bgeu_cond = builder.ugte(bool_sid, rs1_val, rs2_val, None);
 
-    let branch_target = builder.add(mw_sid, core.pc_state, sb_imm, Some("branch target".to_string()));
-    let jal_target = builder.add(mw_sid, core.pc_state, uj_imm, Some("JAL target".to_string()));
+    let branch_target = builder.add(
+        mw_sid,
+        core.pc_state,
+        sb_imm,
+        Some("branch target".to_string()),
+    );
+    let jal_target = builder.add(
+        mw_sid,
+        core.pc_state,
+        uj_imm,
+        Some("JAL target".to_string()),
+    );
     let jalr_target = {
         let raw = builder.add(mw_sid, rs1_val, i_imm, None);
         // Clear LSB per JALR spec
         let mask = builder.constd(mw_sid, !1u64, None);
-        builder.and_node(mw_sid, raw, mask, Some("JALR target (LSB cleared)".to_string()))
+        builder.and_node(
+            mw_sid,
+            raw,
+            mask,
+            Some("JALR target (LSB cleared)".to_string()),
+        )
     };
 
     // Build next_pc ITE chain
@@ -382,11 +593,21 @@ pub fn rotor_combinational(
     }
 
     // JAL
-    let is_jal = builder.eq_node(bool_sid, instruction_id, consts.nid_instr_id(InstrId::Jal), None);
+    let is_jal = builder.eq_node(
+        bool_sid,
+        instruction_id,
+        consts.nid_instr_id(InstrId::Jal),
+        None,
+    );
     next_pc = builder.ite(mw_sid, is_jal, jal_target, next_pc, None);
 
     // JALR
-    let is_jalr = builder.eq_node(bool_sid, instruction_id, consts.nid_instr_id(InstrId::Jalr), None);
+    let is_jalr = builder.eq_node(
+        bool_sid,
+        instruction_id,
+        consts.nid_instr_id(InstrId::Jalr),
+        None,
+    );
     next_pc = builder.ite(mw_sid, is_jalr, jalr_target, next_pc, None);
 
     // ===== WRITES FLAGS =====
@@ -398,19 +619,36 @@ pub fn rotor_combinational(
         let no_write = builder.or_node(bool_sid, is_store_instr, consts.nid_false, None);
         let is_branch_any = {
             let mut acc = consts.nid_false;
-            for id in [InstrId::Beq, InstrId::Bne, InstrId::Blt, InstrId::Bge, InstrId::Bltu, InstrId::Bgeu] {
+            for id in [
+                InstrId::Beq,
+                InstrId::Bne,
+                InstrId::Blt,
+                InstrId::Bge,
+                InstrId::Bltu,
+                InstrId::Bgeu,
+            ] {
                 let eq = builder.eq_node(bool_sid, instruction_id, consts.nid_instr_id(id), None);
                 acc = builder.or_node(bool_sid, acc, eq, None);
             }
             acc
         };
-        let is_ecall_node = builder.eq_node(bool_sid, instruction_id, consts.nid_instr_id(InstrId::Ecall), None);
+        let is_ecall_node = builder.eq_node(
+            bool_sid,
+            instruction_id,
+            consts.nid_instr_id(InstrId::Ecall),
+            None,
+        );
         let no_rd = builder.or_node(bool_sid, no_write, is_branch_any, None);
         let no_rd = builder.or_node(bool_sid, no_rd, is_ecall_node, None);
         builder.not(bool_sid, no_rd, Some("instruction writes rd?".to_string()))
     };
 
-    let is_ecall = builder.eq_node(bool_sid, instruction_id, consts.nid_instr_id(InstrId::Ecall), Some("is ecall?".to_string()));
+    let is_ecall = builder.eq_node(
+        bool_sid,
+        instruction_id,
+        consts.nid_instr_id(InstrId::Ecall),
+        Some("is ecall?".to_string()),
+    );
 
     // Store width (as machine word for convenience)
     let store_width = {
@@ -419,14 +657,34 @@ pub fn rotor_combinational(
         let w4 = consts.nid_machine_word_4;
         let w8 = consts.nid_machine_word_8;
         let mut sw = consts.nid_machine_word_0;
-        let sb_cond = builder.eq_node(bool_sid, instruction_id, consts.nid_instr_id(InstrId::Sb), None);
+        let sb_cond = builder.eq_node(
+            bool_sid,
+            instruction_id,
+            consts.nid_instr_id(InstrId::Sb),
+            None,
+        );
         sw = builder.ite(mw_sid, sb_cond, w1, sw, None);
-        let sh_cond = builder.eq_node(bool_sid, instruction_id, consts.nid_instr_id(InstrId::Sh), None);
+        let sh_cond = builder.eq_node(
+            bool_sid,
+            instruction_id,
+            consts.nid_instr_id(InstrId::Sh),
+            None,
+        );
         sw = builder.ite(mw_sid, sh_cond, w2, sw, None);
-        let sw_cond = builder.eq_node(bool_sid, instruction_id, consts.nid_instr_id(InstrId::Sw), None);
+        let sw_cond = builder.eq_node(
+            bool_sid,
+            instruction_id,
+            consts.nid_instr_id(InstrId::Sw),
+            None,
+        );
         sw = builder.ite(mw_sid, sw_cond, w4, sw, None);
         if config.xlen == Xlen::X64 {
-            let sd_cond = builder.eq_node(bool_sid, instruction_id, consts.nid_instr_id(InstrId::Sd), None);
+            let sd_cond = builder.eq_node(
+                bool_sid,
+                instruction_id,
+                consts.nid_instr_id(InstrId::Sd),
+                None,
+            );
             sw = builder.ite(mw_sid, sd_cond, w8, sw, None);
         }
         sw

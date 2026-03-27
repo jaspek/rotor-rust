@@ -1,7 +1,7 @@
 use crate::btor2::builder::Btor2Builder;
 use crate::btor2::node::NodeId;
 use crate::machine::sorts::{MachineConstants, MachineSorts};
-use crate::riscv::isa::{InstrId};
+use crate::riscv::isa::InstrId;
 
 /// Kernel state for one core, modeling syscall handling.
 pub struct KernelState {
@@ -115,11 +115,36 @@ impl KernelState {
     ) -> SyscallDecode {
         let bool_sid = sorts.sid_boolean;
 
-        let is_exit = builder.eq_node(bool_sid, a7_value, consts.nid_exit_syscall, Some("syscall == exit?".to_string()));
-        let is_read = builder.eq_node(bool_sid, a7_value, consts.nid_read_syscall, Some("syscall == read?".to_string()));
-        let is_write = builder.eq_node(bool_sid, a7_value, consts.nid_write_syscall, Some("syscall == write?".to_string()));
-        let is_openat = builder.eq_node(bool_sid, a7_value, consts.nid_openat_syscall, Some("syscall == openat?".to_string()));
-        let is_brk = builder.eq_node(bool_sid, a7_value, consts.nid_brk_syscall, Some("syscall == brk?".to_string()));
+        let is_exit = builder.eq_node(
+            bool_sid,
+            a7_value,
+            consts.nid_exit_syscall,
+            Some("syscall == exit?".to_string()),
+        );
+        let is_read = builder.eq_node(
+            bool_sid,
+            a7_value,
+            consts.nid_read_syscall,
+            Some("syscall == read?".to_string()),
+        );
+        let is_write = builder.eq_node(
+            bool_sid,
+            a7_value,
+            consts.nid_write_syscall,
+            Some("syscall == write?".to_string()),
+        );
+        let is_openat = builder.eq_node(
+            bool_sid,
+            a7_value,
+            consts.nid_openat_syscall,
+            Some("syscall == openat?".to_string()),
+        );
+        let is_brk = builder.eq_node(
+            bool_sid,
+            a7_value,
+            consts.nid_brk_syscall,
+            Some("syscall == brk?".to_string()),
+        );
 
         SyscallDecode {
             is_exit,
@@ -146,11 +171,23 @@ impl KernelState {
 
         // a0 == 0 means query current break
         let a0_is_zero = builder.eq_node(bool_sid, a0_value, consts.nid_machine_word_0, None);
-        let new_brk = builder.ite(mw_sid, a0_is_zero, current_brk, a0_value, Some("brk: query or set".to_string()));
+        let new_brk = builder.ite(
+            mw_sid,
+            a0_is_zero,
+            current_brk,
+            a0_value,
+            Some("brk: query or set".to_string()),
+        );
 
         // Only update if this is actually a brk ecall
         let is_brk_ecall = builder.and_node(bool_sid, is_ecall, is_brk_syscall, None);
-        builder.ite(mw_sid, is_brk_ecall, new_brk, current_brk, Some("next program break".to_string()))
+        builder.ite(
+            mw_sid,
+            is_brk_ecall,
+            new_brk,
+            current_brk,
+            Some("next program break".to_string()),
+        )
     }
 
     /// Compute the return value (written to a0) for ecall.
@@ -167,7 +204,8 @@ impl KernelState {
 
         // exit: no return (but model keeps a0)
         // brk: return new break value
-        let a0_is_zero = builder.eq_node(sorts.sid_boolean, a0_value, consts.nid_machine_word_0, None);
+        let a0_is_zero =
+            builder.eq_node(sorts.sid_boolean, a0_value, consts.nid_machine_word_0, None);
         let brk_return = builder.ite(mw_sid, a0_is_zero, current_brk, a0_value, None);
 
         // read: return number of bytes actually read (min of requested and available)
@@ -184,7 +222,13 @@ impl KernelState {
         result = builder.ite(mw_sid, syscall.is_openat, openat_return, result, None);
         result = builder.ite(mw_sid, syscall.is_write, write_return, result, None);
         result = builder.ite(mw_sid, syscall.is_read, read_return, result, None);
-        result = builder.ite(mw_sid, syscall.is_brk, brk_return, result, Some("ecall return value".to_string()));
+        result = builder.ite(
+            mw_sid,
+            syscall.is_brk,
+            brk_return,
+            result,
+            Some("ecall return value".to_string()),
+        );
 
         result
     }

@@ -97,7 +97,14 @@ pub fn model_rotor_synthesis(
     };
 
     for core_id in 0..config.num_cores {
-        let core = CoreState::new(&mut builder, &sorts, &consts, config, &empty_binary, core_id);
+        let core = CoreState::new(
+            &mut builder,
+            &sorts,
+            &consts,
+            config,
+            &empty_binary,
+            core_id,
+        );
         let comb = rotor_combinational(&mut builder, &sorts, &consts, config, &core);
         rotor_sequential(&mut builder, &sorts, &consts, config, &core, &comb);
         rotor_properties(&mut builder, &sorts, &consts, config, &core, &comb);

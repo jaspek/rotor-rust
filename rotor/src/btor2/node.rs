@@ -131,33 +131,102 @@ pub enum Op {
     // Sorts
     Sort(Sort),
     // Constants
-    Constd { sort: NodeId, value: u64 },
-    Consth { sort: NodeId, value: u64 },
-    Const { sort: NodeId, value: u64 },
+    Constd {
+        sort: NodeId,
+        value: u64,
+    },
+    Consth {
+        sort: NodeId,
+        value: u64,
+    },
+    Const {
+        sort: NodeId,
+        value: u64,
+    },
     // Input / State
-    Input { sort: NodeId, symbol: String },
-    State { sort: NodeId, symbol: String },
+    Input {
+        sort: NodeId,
+        symbol: String,
+    },
+    State {
+        sort: NodeId,
+        symbol: String,
+    },
     // Init / Next
-    Init { sort: NodeId, state: NodeId, value: NodeId },
-    Next { sort: NodeId, state: NodeId, value: NodeId },
+    Init {
+        sort: NodeId,
+        state: NodeId,
+        value: NodeId,
+    },
+    Next {
+        sort: NodeId,
+        state: NodeId,
+        value: NodeId,
+    },
     // Extension
-    Sext { sort: NodeId, arg: NodeId, width: u32 },
-    Uext { sort: NodeId, arg: NodeId, width: u32 },
-    Slice { sort: NodeId, arg: NodeId, upper: u32, lower: u32 },
+    Sext {
+        sort: NodeId,
+        arg: NodeId,
+        width: u32,
+    },
+    Uext {
+        sort: NodeId,
+        arg: NodeId,
+        width: u32,
+    },
+    Slice {
+        sort: NodeId,
+        arg: NodeId,
+        upper: u32,
+        lower: u32,
+    },
     // Unary
-    Unary { kind: UnaryOp, sort: NodeId, arg: NodeId },
+    Unary {
+        kind: UnaryOp,
+        sort: NodeId,
+        arg: NodeId,
+    },
     // Binary
-    Binary { kind: BinaryOp, sort: NodeId, left: NodeId, right: NodeId },
+    Binary {
+        kind: BinaryOp,
+        sort: NodeId,
+        left: NodeId,
+        right: NodeId,
+    },
     // Concat
-    Concat { sort: NodeId, left: NodeId, right: NodeId },
+    Concat {
+        sort: NodeId,
+        left: NodeId,
+        right: NodeId,
+    },
     // Array read
-    Read { sort: NodeId, array: NodeId, index: NodeId },
+    Read {
+        sort: NodeId,
+        array: NodeId,
+        index: NodeId,
+    },
     // Ternary
-    Ite { sort: NodeId, cond: NodeId, then_val: NodeId, else_val: NodeId },
-    Write { sort: NodeId, array: NodeId, index: NodeId, value: NodeId },
+    Ite {
+        sort: NodeId,
+        cond: NodeId,
+        then_val: NodeId,
+        else_val: NodeId,
+    },
+    Write {
+        sort: NodeId,
+        array: NodeId,
+        index: NodeId,
+        value: NodeId,
+    },
     // Properties
-    Bad { cond: NodeId, symbol: String },
-    Constraint { cond: NodeId, symbol: String },
+    Bad {
+        cond: NodeId,
+        symbol: String,
+    },
+    Constraint {
+        cond: NodeId,
+        symbol: String,
+    },
 }
 
 pub struct Node {

@@ -31,7 +31,13 @@ impl RegisterFile {
         value: NodeId,
         comment: impl Into<Option<String>>,
     ) -> NodeId {
-        builder.write(sorts.sid_register_state, reg_state, reg_addr, value, comment)
+        builder.write(
+            sorts.sid_register_state,
+            reg_state,
+            reg_addr,
+            value,
+            comment,
+        )
     }
 
     /// Load the value of a specific register by index (0-31).
