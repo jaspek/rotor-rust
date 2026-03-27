@@ -56,7 +56,7 @@ function buildElements(nodes, filter = {}, options = {}) {
     // If subgraph root is specified, only show its cone of influence
     let allowedNids = null;
     if (options.subgraphRoot) {
-        allowedNids = getConeOfInfluence(nodes, options.subgraphRoot);
+        allowedNids = getConeOfInfluence(nodes, options.subgraphRoot, options.maxDepth);
     }
 
     // Determine visible nodes
@@ -474,16 +474,31 @@ function initGraph(container, elements) {
 /**
  * Run the dagre layout.
  */
-function runLayout(cy) {
-    const layout = cy.layout({
-        name: 'dagre',
-        rankDir: 'BT',
-        nodeSep: 30,
-        rankSep: 45,
-        edgeSep: 12,
-        ranker: 'tight-tree',
-        animate: false,
-    });
+function runLayout(cy, mode) {
+    let opts;
+    if (mode === 'cose') {
+        opts = {
+            name: 'cose',
+            animate: false,
+            nodeRepulsion: function() { return 8000; },
+            idealEdgeLength: function() { return 50; },
+            edgeElasticity: function() { return 100; },
+            gravity: 0.25,
+            numIter: 1000,
+            nodeDimensionsIncludeLabels: true,
+        };
+    } else {
+        opts = {
+            name: 'dagre',
+            rankDir: 'BT',
+            nodeSep: 30,
+            rankSep: 45,
+            edgeSep: 12,
+            ranker: 'tight-tree',
+            animate: false,
+        };
+    }
+    const layout = cy.layout(opts);
     layout.run();
 }
 

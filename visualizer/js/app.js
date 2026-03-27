@@ -8,6 +8,8 @@ let cy = null;
 let parsedNodes = null;
 let currentFilter = { hideSorts: true, hideConstants: false };
 let subgraphRoot = null;
+let maxDepth = Infinity;
+let layoutMode = 'dagre';
 let collapsedNodes = new Set();
 let clumpCategories = new Set();
 const player = new WitnessPlayer();
@@ -38,6 +40,11 @@ const btnClearHighlight = document.getElementById('btn-clear-highlight');
 const selectRoot = document.getElementById('select-root');
 const subgraphInfo = document.getElementById('subgraph-info');
 const btnLongestPath = document.getElementById('btn-longest-path');
+const depthControl = document.getElementById('depth-control');
+const depthSlider = document.getElementById('depth-slider');
+const depthValue = document.getElementById('depth-value');
+const layoutDagre = document.getElementById('layout-dagre');
+const layoutCose = document.getElementById('layout-cose');
 const clumpHeader = document.getElementById('clump-header');
 const clumpOptions = document.getElementById('clump-options');
 
@@ -87,8 +94,38 @@ selectRoot.addEventListener('change', () => {
     const val = selectRoot.value;
     subgraphRoot = val ? parseInt(val) : null;
     collapsedNodes.clear();
+    if (subgraphRoot) {
+        depthControl.classList.remove('hidden');
+    } else {
+        depthControl.classList.add('hidden');
+        maxDepth = Infinity;
+        depthSlider.value = 20;
+        depthValue.textContent = 'All';
+    }
     renderGraph();
     updateSubgraphInfo();
+});
+
+// Depth slider
+depthSlider.addEventListener('input', () => {
+    const val = parseInt(depthSlider.value);
+    if (val >= 20) {
+        maxDepth = Infinity;
+        depthValue.textContent = 'All';
+    } else {
+        maxDepth = val;
+        depthValue.textContent = String(val);
+    }
+    renderGraph();
+    updateSubgraphInfo();
+});
+
+// Layout toggle
+layoutDagre.addEventListener('change', () => {
+    if (layoutDagre.checked) { layoutMode = 'dagre'; renderGraph(); }
+});
+layoutCose.addEventListener('change', () => {
+    if (layoutCose.checked) { layoutMode = 'cose'; renderGraph(); }
 });
 
 // Longest path
@@ -234,12 +271,21 @@ function handleWitnessPaste() {
 }
 
 async function loadExampleWitness() {
-    if (!parsedNodes) await loadExample();
+    // Always load the counter-with-input model to match the witness
+    setStatus('Loading counter model + witness...');
+    try {
+        const modelResp = await fetch('./examples/counter-with-input.btor2');
+        const modelText = await modelResp.text();
+        loadBtor2(modelText, 'counter-with-input.btor2');
+    } catch (err) {
+        setStatus('Failed to load example model: ' + err.message);
+        return;
+    }
     setStatus('Loading example witness...');
     try {
-        const resp = await fetch('./examples/simple-assignment-1-35.wit');
+        const resp = await fetch('./examples/counter-with-input.wit');
         const text = await resp.text();
-        loadWitness(text, 'simple-assignment-1-35.wit');
+        loadWitness(text, 'counter-with-input.wit (btormc output)');
     } catch (err) {
         setStatus('Failed to load example witness: ' + err.message);
     }
@@ -385,6 +431,7 @@ function renderGraph() {
 
     const options = {
         subgraphRoot: subgraphRoot,
+        maxDepth: maxDepth,
         collapsedNodes: collapsedNodes,
         clumpCategories: clumpCategories,
     };
@@ -396,8 +443,9 @@ function renderGraph() {
     setStatus('Running layout...');
 
     setTimeout(() => {
-        runLayout(cy);
+        runLayout(cy, layoutMode);
         cy.fit(null, 30);
+        if (layoutMode !== 'cose') cy.nodes().ungrabify();
         setupGraphInteraction();
 
         if (player.loaded) {
@@ -516,8 +564,9 @@ function updateSubgraphInfo() {
     if (subgraphRoot) {
         const node = parsedNodes.get(subgraphRoot);
         const name = node ? (node.name || node.op) : subgraphRoot;
-        const cone = getConeOfInfluence(parsedNodes, subgraphRoot);
-        subgraphInfo.innerHTML = `<span style="color:var(--accent);">${escHtml(String(name))}</span> <span class="text-muted">(${cone.size} nodes)</span>`;
+        const cone = getConeOfInfluence(parsedNodes, subgraphRoot, maxDepth);
+        const depthLabel = maxDepth === Infinity ? '' : `, depth ${maxDepth}`;
+        subgraphInfo.innerHTML = `<span style="color:var(--accent);">${escHtml(String(name))}</span> <span class="text-muted">(${cone.size} nodes${depthLabel})</span>`;
     } else {
         subgraphInfo.innerHTML = '<span class="text-muted">Showing full graph</span>';
     }

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BTOR2 Visualizer</title>
-    <link rel="stylesheet" href="css/style.css?v=3">
+    <link rel="stylesheet" href="css/style.css?v=6">
 </head>
 <body>
     <div class="app">
@@ -64,6 +64,13 @@
                 <select class="select-root" id="select-root">
                     <option value="">Full graph</option>
                 </select>
+                <div class="depth-control hidden" id="depth-control">
+                    <div class="filter-row">
+                        <label for="depth-slider">Depth:</label>
+                        <input type="range" id="depth-slider" min="1" max="20" value="20">
+                        <span id="depth-value">All</span>
+                    </div>
+                </div>
                 <div class="btn-group" style="margin-top: 4px;">
                     <button class="btn btn-small" id="btn-longest-path" title="Show longest path">Longest Path</button>
                 </div>
@@ -71,6 +78,16 @@
 
             <div class="panel-section">
                 <h3>View Options</h3>
+                <div class="layout-toggle">
+                    <label class="layout-option">
+                        <input type="radio" name="layout-mode" id="layout-dagre" value="dagre" checked>
+                        Hierarchical
+                    </label>
+                    <label class="layout-option">
+                        <input type="radio" name="layout-mode" id="layout-cose" value="cose">
+                        Force
+                    </label>
+                </div>
                 <div class="filter-row">
                     <input type="checkbox" id="filter-sorts" checked>
                     <label for="filter-sorts">Hide sort nodes</label>
@@ -194,10 +211,10 @@
     <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
 
     <!-- App Scripts -->
-    <script src="js/parser.js?v=3"></script>
-    <script src="js/graph.js?v=3"></script>
-    <script src="js/witness.js?v=3"></script>
-    <script src="js/witness-player.js?v=3"></script>
-    <script src="js/app.js?v=3"></script>
+    <script src="js/parser.js?v=6"></script>
+    <script src="js/graph.js?v=6"></script>
+    <script src="js/witness.js?v=6"></script>
+    <script src="js/witness-player.js?v=6"></script>
+    <script src="js/app.js?v=6"></script>
 </body>
 </html>

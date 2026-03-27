@@ -146,6 +146,56 @@ html, body {
     accent-color: var(--accent);
 }
 
+/* Depth control */
+.depth-control {
+    margin-top: 6px;
+    margin-bottom: 4px;
+}
+
+.depth-control.hidden {
+    display: none;
+}
+
+.depth-control input[type="range"] {
+    flex: 1;
+    height: 3px;
+    accent-color: var(--accent);
+}
+
+.depth-control label {
+    font-size: 11px;
+    color: var(--text-muted);
+    min-width: 40px;
+}
+
+.depth-control span {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent);
+    min-width: 24px;
+    text-align: right;
+}
+
+/* Layout toggle */
+.layout-toggle {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.layout-option {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--text);
+}
+
+.layout-option input[type="radio"] {
+    accent-color: var(--accent);
+}
+
 /* Collapsible clump options */
 .collapsible-header {
     font-size: 11px;

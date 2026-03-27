@@ -197,17 +197,20 @@ function computeStats(nodes) {
 /**
  * Get the cone of influence (all transitive dependencies) for a given node.
  */
-function getConeOfInfluence(nodes, startNid) {
+function getConeOfInfluence(nodes, startNid, maxDepth) {
+    if (maxDepth === undefined || maxDepth === null) maxDepth = Infinity;
     const visited = new Set();
-    const queue = [startNid];
+    const queue = [[startNid, 0]];
     while (queue.length > 0) {
-        const nid = queue.pop();
+        const [nid, depth] = queue.shift();
         if (visited.has(nid)) continue;
         visited.add(nid);
-        const node = nodes.get(nid);
-        if (node) {
-            for (const opNid of node.operands) {
-                if (!visited.has(opNid)) queue.push(opNid);
+        if (depth < maxDepth) {
+            const node = nodes.get(nid);
+            if (node) {
+                for (const opNid of node.operands) {
+                    if (!visited.has(opNid)) queue.push([opNid, depth + 1]);
+                }
             }
         }
     }
