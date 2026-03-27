@@ -226,6 +226,22 @@ docker run --rm --entrypoint /bin/bash \
   -c "btormc -kmax 100 /work/model.btor2"
 ```
 
+## Rust vs C Rotor: Model Comparison
+
+Both the Rust and C implementations of Rotor generate valid BTOR2 models that btormc can verify. The Rust rewrite produces more compact models with a different initialization encoding:
+
+| Aspect | C Rotor | Rust Rotor |
+|--------|---------|------------|
+| **Model size** (division-by-zero) | 4,163 lines | 1,176 lines (3.5x smaller) |
+| **Bad properties** | 24 (granular, per-instruction type) | 3 (abstract: exit code, div-by-zero, seg-fault) |
+| **States** | 14 (with phased init/zeroed/loaded) | 13 |
+| **Initialization** | Unfolded over time steps (`zeroed-*` → `loaded-*`) | Direct init from binary data |
+| **btormc counterexample** | Step 77 (kmax=100) | Step 111 (kmax=200) |
+
+The C rotor uses **phased initialization** — separate `zeroed-code-segment` and `loaded-code-segment` states that unfold memory loading over clock cycles. The Rust rotor encodes initialization **directly** via `init` statements, producing a more compact model.
+
+Both produce semantically equivalent results: btormc finds counterexamples in both. The Rust model requires a higher `kmax` bound because its compact encoding results in more unrolling steps for the solver, but the generated models are ~3.5x smaller.
+
 ## Verification
 
 The generated BTOR2 models can be verified with:
