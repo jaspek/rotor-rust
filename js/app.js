@@ -1,10 +1,16 @@
 /**
  * BTOR2 Visualizer — Application logic.
+ * Features: subgraph views, collapse/expand, clumping, longest path,
+ * witness trace animation.
  */
 
 let cy = null;
 let parsedNodes = null;
 let currentFilter = { hideSorts: true, hideConstants: false };
+let subgraphRoot = null;
+let collapsedNodes = new Set();
+let clumpCategories = new Set();
+const player = new WitnessPlayer();
 
 // ============ UI References ============
 
@@ -29,6 +35,32 @@ const btnZoomIn = document.getElementById('btn-zoom-in');
 const btnZoomOut = document.getElementById('btn-zoom-out');
 const btnFit = document.getElementById('btn-fit');
 const btnClearHighlight = document.getElementById('btn-clear-highlight');
+const selectRoot = document.getElementById('select-root');
+const subgraphInfo = document.getElementById('subgraph-info');
+const btnLongestPath = document.getElementById('btn-longest-path');
+const clumpHeader = document.getElementById('clump-header');
+const clumpOptions = document.getElementById('clump-options');
+
+// Witness UI
+const witnessFileInput = document.getElementById('witness-file-input');
+const btnWitnessUpload = document.getElementById('btn-witness-upload');
+const btnWitnessPaste = document.getElementById('btn-witness-paste');
+const witnessControls = document.getElementById('witness-controls');
+const witnessStepEl = document.getElementById('witness-step');
+const witnessTotalEl = document.getElementById('witness-total');
+const btnWitnessStart = document.getElementById('btn-witness-start');
+const btnWitnessBack = document.getElementById('btn-witness-back');
+const btnWitnessPlay = document.getElementById('btn-witness-play');
+const btnWitnessFwd = document.getElementById('btn-witness-fwd');
+const btnWitnessEnd = document.getElementById('btn-witness-end');
+const witnessSpeed = document.getElementById('witness-speed');
+const witnessSpeedLabel = document.getElementById('witness-speed-label');
+const btnWitnessClose = document.getElementById('btn-witness-close');
+const witnessPasteOverlay = document.getElementById('witness-paste-overlay');
+const witnessPasteTextarea = document.getElementById('witness-paste-textarea');
+const btnWitnessPasteConfirm = document.getElementById('btn-witness-paste-confirm');
+const btnWitnessPasteCancel = document.getElementById('btn-witness-paste-cancel');
+const btnWitnessExample = document.getElementById('btn-witness-example');
 
 // ============ Event Handlers ============
 
@@ -45,7 +77,91 @@ searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch()
 btnZoomIn.addEventListener('click', () => cy && cy.zoom(cy.zoom() * 1.3));
 btnZoomOut.addEventListener('click', () => cy && cy.zoom(cy.zoom() / 1.3));
 btnFit.addEventListener('click', () => cy && cy.fit(null, 30));
-btnClearHighlight.addEventListener('click', () => { if (cy) clearHighlights(cy); });
+btnClearHighlight.addEventListener('click', () => {
+    if (cy) clearHighlights(cy);
+    if (player.loaded) player.goToStep(player.currentStep);
+});
+
+// Subgraph root selector
+selectRoot.addEventListener('change', () => {
+    const val = selectRoot.value;
+    subgraphRoot = val ? parseInt(val) : null;
+    collapsedNodes.clear();
+    renderGraph();
+    updateSubgraphInfo();
+});
+
+// Longest path
+btnLongestPath.addEventListener('click', () => {
+    if (!cy || !parsedNodes) return;
+    const root = subgraphRoot || findFirstBadNid();
+    if (root) {
+        const path = highlightLongestPath(cy, parsedNodes, root);
+        setStatus(`Longest path: ${path.length} nodes from #${root}`);
+    }
+});
+
+// Clumping controls
+clumpHeader.addEventListener('click', () => {
+    clumpOptions.classList.toggle('collapsed');
+    clumpHeader.querySelector('span').textContent =
+        clumpOptions.classList.contains('collapsed') ? '\u25B6' : '\u25BC';
+});
+
+['clump-logic', 'clump-state', 'clump-memory', 'clump-constant'].forEach(id => {
+    document.getElementById(id).addEventListener('change', () => {
+        clumpCategories.clear();
+        if (document.getElementById('clump-logic').checked) clumpCategories.add('logic');
+        if (document.getElementById('clump-state').checked) clumpCategories.add('state');
+        if (document.getElementById('clump-memory').checked) clumpCategories.add('memory');
+        if (document.getElementById('clump-constant').checked) clumpCategories.add('constant');
+        renderGraph();
+    });
+});
+
+// Witness event handlers
+btnWitnessUpload.addEventListener('click', () => witnessFileInput.click());
+witnessFileInput.addEventListener('change', handleWitnessUpload);
+btnWitnessPaste.addEventListener('click', showWitnessPasteOverlay);
+btnWitnessPasteConfirm.addEventListener('click', handleWitnessPaste);
+btnWitnessPasteCancel.addEventListener('click', hideWitnessPasteOverlay);
+btnWitnessExample.addEventListener('click', loadExampleWitness);
+btnWitnessStart.addEventListener('click', () => player.goToStep(0));
+btnWitnessBack.addEventListener('click', () => player.stepBackward());
+btnWitnessPlay.addEventListener('click', toggleWitnessPlay);
+btnWitnessFwd.addEventListener('click', () => player.stepForward());
+btnWitnessEnd.addEventListener('click', () => player.goToStep(player.totalSteps - 1));
+btnWitnessClose.addEventListener('click', closeWitness);
+witnessSpeed.addEventListener('input', () => {
+    const ms = parseInt(witnessSpeed.value);
+    player.setSpeed(ms);
+    witnessSpeedLabel.textContent = (ms / 1000).toFixed(1) + 's';
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
+    if (player.loaded) {
+        switch (e.key) {
+            case 'ArrowLeft': e.preventDefault(); player.stepBackward(); break;
+            case 'ArrowRight': e.preventDefault(); player.stepForward(); break;
+            case ' ': e.preventDefault(); toggleWitnessPlay(); break;
+            case 'Home': e.preventDefault(); player.goToStep(0); break;
+            case 'End': e.preventDefault(); player.goToStep(player.totalSteps - 1); break;
+            case 'Escape': if (player.playing) { player.pause(); updatePlayButton(); } break;
+        }
+    }
+});
+
+// Player callbacks
+player.onStepChange = (step, total) => {
+    witnessStepEl.textContent = step;
+    witnessTotalEl.textContent = total - 1;
+    updateWitnessDetailPanel(step);
+    setStatus(`Witness step ${step} of ${total - 1}`);
+};
+player.onStop = () => updatePlayButton();
 
 // ============ File Handling ============
 
@@ -54,9 +170,7 @@ function handleFileUpload(e) {
     if (!file) return;
     setStatus(`Loading ${file.name}...`);
     const reader = new FileReader();
-    reader.onload = ev => {
-        loadBtor2(ev.target.result, file.name);
-    };
+    reader.onload = ev => loadBtor2(ev.target.result, file.name);
     reader.readAsText(file);
     fileInput.value = '';
 }
@@ -89,24 +203,178 @@ async function loadExample() {
     }
 }
 
+// ============ Witness File Handling ============
+
+function handleWitnessUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!parsedNodes) { setStatus('Load a BTOR2 model first'); return; }
+    const reader = new FileReader();
+    reader.onload = ev => loadWitness(ev.target.result, file.name);
+    reader.readAsText(file);
+    witnessFileInput.value = '';
+}
+
+function showWitnessPasteOverlay() {
+    if (!parsedNodes) { setStatus('Load a BTOR2 model first'); return; }
+    witnessPasteOverlay.classList.remove('hidden');
+    witnessPasteTextarea.focus();
+}
+
+function hideWitnessPasteOverlay() {
+    witnessPasteOverlay.classList.add('hidden');
+    witnessPasteTextarea.value = '';
+}
+
+function handleWitnessPaste() {
+    const text = witnessPasteTextarea.value.trim();
+    if (!text) return;
+    hideWitnessPasteOverlay();
+    loadWitness(text, 'pasted witness');
+}
+
+async function loadExampleWitness() {
+    if (!parsedNodes) await loadExample();
+    setStatus('Loading example witness...');
+    try {
+        const resp = await fetch('./examples/simple-assignment-1-35.wit');
+        const text = await resp.text();
+        loadWitness(text, 'simple-assignment-1-35.wit');
+    } catch (err) {
+        setStatus('Failed to load example witness: ' + err.message);
+    }
+}
+
+function loadWitness(text, source) {
+    if (!parsedNodes) { setStatus('No model loaded'); return; }
+    setStatus(`Parsing witness from ${source}...`);
+    const witness = parseWitness(text, parsedNodes);
+
+    if (witness.errors.length > 0) {
+        console.warn('Witness parse errors:', witness.errors);
+        for (const err of witness.errors) {
+            if (err.includes('UNSAT')) { setStatus('Witness: UNSAT — no counterexample'); return; }
+        }
+    }
+    if (witness.frames.length === 0) { setStatus('No trace frames found'); return; }
+
+    player.load(witness, parsedNodes, cy);
+    witnessControls.classList.remove('hidden');
+    witnessTotalEl.textContent = witness.frames.length - 1;
+    witnessStepEl.textContent = '0';
+
+    let badInfo = '';
+    if (witness.bad !== null) {
+        const badNid = badIndexToNid(parsedNodes, witness.bad);
+        const badNode = badNid ? parsedNodes.get(badNid) : null;
+        badInfo = ` — bad: ${badNode ? (badNode.name || '#' + badNid) : 'b' + witness.bad}`;
+    }
+    setStatus(`Witness: ${witness.frames.length} steps${badInfo}`);
+    player.goToStep(0);
+}
+
+function closeWitness() {
+    player.unload();
+    witnessControls.classList.add('hidden');
+    if (cy) {
+        cy.elements().removeClass('witness-active witness-state witness-input witness-bad witness-inactive');
+        cy.nodes().forEach(n => { n.data('witnessValue', null); n.data('witnessLabel', null); });
+    }
+    setStatus('Witness closed');
+}
+
+function toggleWitnessPlay() {
+    if (player.playing) player.pause(); else player.play();
+    updatePlayButton();
+}
+
+function updatePlayButton() {
+    if (player.playing) {
+        btnWitnessPlay.innerHTML = '&#9646;&#9646;';
+        btnWitnessPlay.classList.add('playing');
+    } else {
+        btnWitnessPlay.innerHTML = '&#9654;';
+        btnWitnessPlay.classList.remove('playing');
+    }
+}
+
+// ============ Witness Detail Panel ============
+
+function updateWitnessDetailPanel(step) {
+    if (!player.loaded) return;
+    const frame = player.witness.frames[step];
+    if (!frame) return;
+
+    let html = `<div class="detail-header">
+        <span class="detail-nid">Step ${step}</span>
+        <span class="detail-op state">Witness</span>
+    </div>`;
+
+    if (player.witness.bad !== null) {
+        const badNid = badIndexToNid(parsedNodes, player.witness.bad);
+        const badNode = badNid ? parsedNodes.get(badNid) : null;
+        const badName = badNode ? (badNode.name || badNode.op) : `b${player.witness.bad}`;
+        const isViolated = step === player.totalSteps - 1;
+        html += `<div class="detail-row">
+            <span class="label">Bad:</span>
+            <span style="color:var(--bad-color);font-weight:600;">${escHtml(badName)}${isViolated ? ' — VIOLATED' : ''}</span>
+        </div>`;
+    }
+
+    if (frame.states.size > 0) {
+        html += `<div class="detail-section">States (${frame.states.size})</div><div class="detail-links">`;
+        for (const [nid, entry] of frame.states) {
+            const node = parsedNodes.get(nid);
+            const name = node ? (node.name || `#${nid}`) : `#${nid}`;
+            const value = Array.isArray(entry) ? `[${entry.length} entries]` : formatWitnessValue(entry.bits);
+            html += `<a class="node-link" data-nid="${nid}">
+                <span style="color:var(--state-color);">${escHtml(name)}</span>
+                <span style="color:var(--text-muted);font-family:var(--font-mono);font-size:10px;"> = ${escHtml(String(value))}</span>
+            </a>`;
+        }
+        html += `</div>`;
+    }
+
+    if (frame.inputs.size > 0) {
+        html += `<div class="detail-section">Inputs (${frame.inputs.size})</div><div class="detail-links">`;
+        for (const [nid, entry] of frame.inputs) {
+            const node = parsedNodes.get(nid);
+            const name = node ? (node.name || `#${nid}`) : `#${nid}`;
+            const value = Array.isArray(entry) ? `[array]` : formatWitnessValue(entry.bits);
+            html += `<a class="node-link" data-nid="${nid}">
+                <span style="color:var(--input-color);">${escHtml(name)}</span>
+                <span style="color:var(--text-muted);font-family:var(--font-mono);font-size:10px;"> = ${escHtml(String(value))}</span>
+            </a>`;
+        }
+        html += `</div>`;
+    }
+
+    detailPanel.innerHTML = html;
+    detailPanel.querySelectorAll('.node-link').forEach(link => {
+        link.addEventListener('click', () => navigateToNode(parseInt(link.dataset.nid)));
+    });
+}
+
 // ============ Core Logic ============
 
 function loadBtor2(text, filename) {
     setStatus(`Parsing ${filename}...`);
+    if (player.loaded) closeWitness();
 
     const result = parseBtor2(text);
     parsedNodes = result.nodes;
+    subgraphRoot = null;
+    collapsedNodes.clear();
 
-    if (result.errors.length > 0) {
-        console.warn('Parse errors:', result.errors);
-    }
+    if (result.errors.length > 0) console.warn('Parse errors:', result.errors);
 
     const stats = computeStats(parsedNodes);
     renderStats(stats);
     renderNodeList(parsedNodes);
+    populateRootSelector(parsedNodes);
     renderGraph();
 
-    setStatus(`Loaded ${filename}: ${stats.total} nodes, ${stats.badCount} bad properties, ${stats.stateCount} states`);
+    setStatus(`Loaded ${filename}: ${stats.total} nodes, ${stats.badCount} bad, ${stats.stateCount} states`);
 }
 
 function renderGraph() {
@@ -115,47 +383,198 @@ function renderGraph() {
     currentFilter.hideSorts = filterSorts.checked;
     currentFilter.hideConstants = filterConsts.checked;
 
-    const elements = buildElements(parsedNodes, currentFilter);
+    const options = {
+        subgraphRoot: subgraphRoot,
+        collapsedNodes: collapsedNodes,
+        clumpCategories: clumpCategories,
+    };
+
+    const elements = buildElements(parsedNodes, currentFilter, options);
 
     if (cy) cy.destroy();
-
     cy = initGraph(graphContainer, elements);
     setStatus('Running layout...');
 
-    // Run layout asynchronously for UI responsiveness
     setTimeout(() => {
         runLayout(cy);
         cy.fit(null, 30);
         setupGraphInteraction();
+
+        if (player.loaded) {
+            player.cy = cy;
+            player.goToStep(player.currentStep);
+        }
         setStatus('Ready');
     }, 50);
 }
 
 function setupGraphInteraction() {
-    // Click node → show detail
+    // Click node → show detail; double-click → collapse/expand
     cy.on('tap', 'node', function (evt) {
         const nid = parseInt(evt.target.data('nid'));
-        showNodeDetail(nid);
+        if (isNaN(nid)) return; // clump node
 
-        // Highlight
+        if (player.loaded) {
+            showWitnessNodeDetail(nid);
+        } else {
+            showNodeDetail(nid);
+        }
+
         cy.elements().removeClass('highlighted neighbor');
         evt.target.addClass('highlighted');
         evt.target.neighborhood().addClass('neighbor');
     });
 
+    // Double-click node → toggle collapse/expand
+    cy.on('dbltap', 'node', function (evt) {
+        const nid = parseInt(evt.target.data('nid'));
+        if (isNaN(nid)) return;
+        const node = parsedNodes.get(nid);
+        if (!node) return;
+
+        // Only allow collapse on non-leaf nodes (those with operands)
+        if (node.operands.length === 0) return;
+
+        if (collapsedNodes.has(nid)) {
+            collapsedNodes.delete(nid);
+            setStatus(`Expanded node #${nid}`);
+        } else {
+            collapsedNodes.add(nid);
+            setStatus(`Collapsed node #${nid} (double-click to expand)`);
+        }
+        renderGraph();
+    });
+
     // Right-click node → show cone of influence
     cy.on('cxttap', 'node', function (evt) {
         const nid = parseInt(evt.target.data('nid'));
+        if (isNaN(nid)) return;
         highlightCone(cy, parsedNodes, nid);
-        setStatus(`Showing cone of influence for node ${nid}`);
+        setStatus(`Cone of influence for #${nid}`);
     });
 
     // Click background → clear selection
     cy.on('tap', function (evt) {
         if (evt.target === cy) {
-            detailPanel.innerHTML = '<p class="placeholder">Click a node to see details</p>';
+            if (player.loaded) {
+                updateWitnessDetailPanel(player.currentStep);
+            } else {
+                detailPanel.innerHTML = '<p class="placeholder">Click a node to see details<br><span class="text-muted">Double-click to collapse/expand</span></p>';
+            }
             cy.elements().removeClass('highlighted neighbor');
         }
+    });
+}
+
+// ============ Subgraph Root Selector ============
+
+function populateRootSelector(nodes) {
+    // Clear existing options
+    while (selectRoot.firstChild) selectRoot.removeChild(selectRoot.firstChild);
+    const defaultOpt = document.createElement('option');
+    defaultOpt.value = '';
+    defaultOpt.textContent = 'Full graph';
+    selectRoot.appendChild(defaultOpt);
+
+    const badNodes = [];
+    const stateNodes = [];
+
+    for (const [nid, node] of nodes) {
+        if (node.op === 'bad') badNodes.push(node);
+        else if (node.op === 'state' && node.name) stateNodes.push(node);
+    }
+
+    // Add bad properties
+    if (badNodes.length > 0) {
+        const grp = document.createElement('optgroup');
+        grp.label = 'Bad Properties (' + badNodes.length + ')';
+        for (const node of badNodes) {
+            const opt = document.createElement('option');
+            opt.value = String(node.nid);
+            opt.textContent = '#' + node.nid + ' ' + (node.name || 'bad');
+            grp.appendChild(opt);
+        }
+        selectRoot.appendChild(grp);
+    }
+
+    // Add named states
+    if (stateNodes.length > 0) {
+        const grp = document.createElement('optgroup');
+        grp.label = 'States (' + stateNodes.length + ')';
+        for (const node of stateNodes.slice(0, 30)) {
+            const opt = document.createElement('option');
+            opt.value = String(node.nid);
+            opt.textContent = '#' + node.nid + ' ' + node.name;
+            grp.appendChild(opt);
+        }
+        selectRoot.appendChild(grp);
+    }
+
+}
+
+function updateSubgraphInfo() {
+    if (subgraphRoot) {
+        const node = parsedNodes.get(subgraphRoot);
+        const name = node ? (node.name || node.op) : subgraphRoot;
+        const cone = getConeOfInfluence(parsedNodes, subgraphRoot);
+        subgraphInfo.innerHTML = `<span style="color:var(--accent);">${escHtml(String(name))}</span> <span class="text-muted">(${cone.size} nodes)</span>`;
+    } else {
+        subgraphInfo.innerHTML = '<span class="text-muted">Showing full graph</span>';
+    }
+}
+
+function findFirstBadNid() {
+    for (const [nid, node] of parsedNodes) {
+        if (node.op === 'bad') return nid;
+    }
+    return null;
+}
+
+// ============ Witness-Aware Node Detail ============
+
+function showWitnessNodeDetail(nid) {
+    const node = parsedNodes.get(nid);
+    if (!node) return;
+
+    const sortInfo = node.sortNid ? getSortDescription(node.sortNid) : '';
+    let html = `<div class="detail-header">
+        <span class="detail-nid">#${node.nid}</span>
+        <span class="detail-op ${node.category}">${node.op}</span>
+    </div>`;
+
+    if (node.name) html += `<div class="detail-row"><span class="label">Name:</span> ${escHtml(node.name)}</div>`;
+    if (sortInfo) html += `<div class="detail-row"><span class="label">Sort:</span> ${sortInfo}</div>`;
+
+    // Witness value at current step
+    if (player.loaded) {
+        const frame = player.witness.frames[player.currentStep];
+        if (frame) {
+            const entry = frame.states.get(nid) || frame.inputs.get(nid);
+            if (entry && !Array.isArray(entry)) {
+                const color = frame.states.has(nid) ? 'var(--state-color)' : 'var(--input-color)';
+                html += `<div class="detail-row"><span class="label">Value @${player.currentStep}:</span> <span style="color:${color};font-family:var(--font-mono);font-weight:600;">${escHtml(formatWitnessValue(entry.bits))}</span></div>`;
+                html += `<div class="detail-row"><span class="label">Binary:</span> <span style="font-family:var(--font-mono);font-size:10px;">${escHtml(entry.bits)}</span></div>`;
+            }
+        }
+    }
+
+    // Operands
+    if (node.operands.length > 0) {
+        html += `<div class="detail-section">Operands</div><div class="detail-links">`;
+        for (const opNid of node.operands) {
+            const opNode = parsedNodes.get(opNid);
+            const opLabel = opNode ? `#${opNid} (${opNode.op}${opNode.name ? ': ' + opNode.name : ''})` : `#${opNid}`;
+            html += `<a class="node-link" data-nid="${opNid}">${escHtml(opLabel)}</a>`;
+        }
+        html += `</div>`;
+    }
+
+    html += `<div class="detail-section">Raw BTOR2</div>`;
+    html += `<pre class="raw-line">${escHtml(node.rawLine)}</pre>`;
+
+    detailPanel.innerHTML = html;
+    detailPanel.querySelectorAll('.node-link').forEach(link => {
+        link.addEventListener('click', () => navigateToNode(parseInt(link.dataset.nid)));
     });
 }
 
@@ -166,41 +585,24 @@ function showNodeDetail(nid) {
     if (!node) return;
 
     const sortInfo = node.sortNid ? getSortDescription(node.sortNid) : '';
+    let html = `<div class="detail-header">
+        <span class="detail-nid">#${node.nid}</span>
+        <span class="detail-op ${node.category}">${node.op}</span>
+    </div>`;
 
-    let html = `
-        <div class="detail-header">
-            <span class="detail-nid">#${node.nid}</span>
-            <span class="detail-op ${node.category}">${node.op}</span>
-        </div>
-    `;
+    if (node.name) html += `<div class="detail-row"><span class="label">Name:</span> ${escHtml(node.name)}</div>`;
+    if (sortInfo) html += `<div class="detail-row"><span class="label">Sort:</span> ${sortInfo}</div>`;
+    if (node.comment) html += `<div class="detail-row"><span class="label">Comment:</span> ${escHtml(node.comment)}</div>`;
 
-    if (node.name) {
-        html += `<div class="detail-row"><span class="label">Name:</span> ${escHtml(node.name)}</div>`;
-    }
-
-    if (sortInfo) {
-        html += `<div class="detail-row"><span class="label">Sort:</span> ${sortInfo}</div>`;
-    }
-
-    if (node.comment) {
-        html += `<div class="detail-row"><span class="label">Comment:</span> ${escHtml(node.comment)}</div>`;
-    }
-
-    // Extra info
-    if (node.extra.width !== undefined && node.op !== 'sort') {
+    if (node.extra.width !== undefined && node.op !== 'sort')
         html += `<div class="detail-row"><span class="label">Width:</span> ${node.extra.width}</div>`;
-    }
-    if (node.extra.upper !== undefined) {
+    if (node.extra.upper !== undefined)
         html += `<div class="detail-row"><span class="label">Slice:</span> [${node.extra.upper}:${node.extra.lower}]</div>`;
-    }
-    if (node.extra.value !== undefined) {
+    if (node.extra.value !== undefined)
         html += `<div class="detail-row"><span class="label">Value:</span> ${escHtml(String(node.extra.value))}</div>`;
-    }
 
-    // Operands
     if (node.operands.length > 0) {
-        html += `<div class="detail-section">Operands</div>`;
-        html += `<div class="detail-links">`;
+        html += `<div class="detail-section">Operands</div><div class="detail-links">`;
         for (const opNid of node.operands) {
             const opNode = parsedNodes.get(opNid);
             const opLabel = opNode ? `#${opNid} (${opNode.op}${opNode.name ? ': ' + opNode.name : ''})` : `#${opNid}`;
@@ -209,62 +611,69 @@ function showNodeDetail(nid) {
         html += `</div>`;
     }
 
-    // Dependents
     if (node.dependents.length > 0) {
-        html += `<div class="detail-section">Used by (${node.dependents.length})</div>`;
-        html += `<div class="detail-links">`;
-        const maxShow = 20;
-        const show = node.dependents.slice(0, maxShow);
+        html += `<div class="detail-section">Used by (${node.dependents.length})</div><div class="detail-links">`;
+        const show = node.dependents.slice(0, 20);
         for (const depNid of show) {
             const depNode = parsedNodes.get(depNid);
             const depLabel = depNode ? `#${depNid} (${depNode.op})` : `#${depNid}`;
             html += `<a class="node-link" data-nid="${depNid}">${escHtml(depLabel)}</a>`;
         }
-        if (node.dependents.length > maxShow) {
-            html += `<span class="text-muted">... and ${node.dependents.length - maxShow} more</span>`;
-        }
+        if (node.dependents.length > 20) html += `<span class="text-muted">... and ${node.dependents.length - 20} more</span>`;
         html += `</div>`;
     }
 
-    // Raw line
+    // Collapse hint
+    if (node.operands.length > 0) {
+        const isCollapsed = collapsedNodes.has(nid);
+        html += `<div class="detail-section">Actions</div>`;
+        html += `<button class="btn btn-small" onclick="toggleCollapseNode(${nid})">${isCollapsed ? 'Expand' : 'Collapse'} descendants</button>`;
+        html += `<button class="btn btn-small" style="margin-left:4px;" onclick="viewAsSubgraph(${nid})">View subgraph</button>`;
+    }
+
     html += `<div class="detail-section">Raw BTOR2</div>`;
     html += `<pre class="raw-line">${escHtml(node.rawLine)}</pre>`;
 
     detailPanel.innerHTML = html;
-
-    // Add click handlers for node links
     detailPanel.querySelectorAll('.node-link').forEach(link => {
-        link.addEventListener('click', () => {
-            const targetNid = parseInt(link.dataset.nid);
-            navigateToNode(targetNid);
-        });
+        link.addEventListener('click', () => navigateToNode(parseInt(link.dataset.nid)));
     });
 }
+
+// Global functions for inline event handlers
+window.toggleCollapseNode = function(nid) {
+    if (collapsedNodes.has(nid)) collapsedNodes.delete(nid);
+    else collapsedNodes.add(nid);
+    renderGraph();
+};
+
+window.viewAsSubgraph = function(nid) {
+    subgraphRoot = nid;
+    selectRoot.value = String(nid);
+    collapsedNodes.clear();
+    renderGraph();
+    updateSubgraphInfo();
+};
 
 function navigateToNode(nid) {
     if (!cy) return;
     const cyNode = cy.getElementById(String(nid));
     if (cyNode.length) {
-        cy.animate({
-            center: { eles: cyNode },
-            zoom: 1.5,
-        }, { duration: 300 });
+        cy.animate({ center: { eles: cyNode }, zoom: 1.5 }, { duration: 300 });
         cy.elements().removeClass('highlighted neighbor');
         cyNode.addClass('highlighted');
         cyNode.neighborhood().addClass('neighbor');
-        showNodeDetail(nid);
+        if (player.loaded) showWitnessNodeDetail(nid);
+        else showNodeDetail(nid);
     }
 }
 
 function getSortDescription(sortNid) {
     const sortNode = parsedNodes.get(sortNid);
     if (!sortNode) return `sort #${sortNid}`;
-    if (sortNode.extra.sortKind === 'bitvec') {
-        return `bitvec[${sortNode.extra.width}]`;
-    } else if (sortNode.extra.sortKind === 'array') {
-        const idxSort = getSortDescription(sortNode.extra.indexSort);
-        const elemSort = getSortDescription(sortNode.extra.elementSort);
-        return `array[${idxSort} → ${elemSort}]`;
+    if (sortNode.extra.sortKind === 'bitvec') return `bitvec[${sortNode.extra.width}]`;
+    if (sortNode.extra.sortKind === 'array') {
+        return `array[${getSortDescription(sortNode.extra.indexSort)} \u2192 ${getSortDescription(sortNode.extra.elementSort)}]`;
     }
     return `sort #${sortNid}`;
 }
@@ -293,19 +702,13 @@ function renderNodeList(nodes) {
                 <span class="list-nid">#${n.nid}</span> ${escHtml(label)}
             </a>`;
         }
-        if (catNodes.length > maxShow) {
-            html += `<span class="text-muted list-item">... ${catNodes.length - maxShow} more</span>`;
-        }
+        if (catNodes.length > maxShow) html += `<span class="text-muted list-item">... ${catNodes.length - maxShow} more</span>`;
         html += `</div>`;
     }
 
     nodeList.innerHTML = html;
-
-    // Add click handlers
     nodeList.querySelectorAll('.node-link').forEach(link => {
-        link.addEventListener('click', () => {
-            navigateToNode(parseInt(link.dataset.nid));
-        });
+        link.addEventListener('click', () => navigateToNode(parseInt(link.dataset.nid)));
     });
 }
 
@@ -323,10 +726,7 @@ function renderStats(stats) {
     for (const [op, count] of sortedOps.slice(0, 15)) {
         html += `<div class="stat-row"><span>${op}:</span><span>${count}</span></div>`;
     }
-    if (sortedOps.length > 15) {
-        html += `<div class="text-muted">... ${sortedOps.length - 15} more op types</div>`;
-    }
-
+    if (sortedOps.length > 15) html += `<div class="text-muted">... ${sortedOps.length - 15} more</div>`;
     statsPanel.innerHTML = html;
 }
 
@@ -346,24 +746,18 @@ function doSearch() {
         }
     }
 
-    if (matches.length === 0) {
-        setStatus(`No matches for "${query}"`);
-        return;
-    }
+    if (matches.length === 0) { setStatus(`No matches for "${query}"`); return; }
 
     if (cy) {
         cy.elements().removeClass('highlighted neighbor');
-        for (const nid of matches) {
-            cy.getElementById(String(nid)).addClass('highlighted');
-        }
-        // Fit to matches
         const matchEles = cy.collection();
         for (const nid of matches) {
-            matchEles.merge(cy.getElementById(String(nid)));
+            const el = cy.getElementById(String(nid));
+            el.addClass('highlighted');
+            matchEles.merge(el);
         }
         if (matchEles.length) cy.fit(matchEles, 50);
     }
-
     setStatus(`Found ${matches.length} matches for "${query}"`);
 }
 
@@ -375,9 +769,7 @@ function applyFilters() {
 
 // ============ Utilities ============
 
-function setStatus(msg) {
-    statusBar.textContent = msg;
-}
+function setStatus(msg) { statusBar.textContent = msg; }
 
 function escHtml(str) {
     const div = document.createElement('div');
@@ -387,4 +779,4 @@ function escHtml(str) {
 
 // ============ Init ============
 
-setStatus('Ready — upload a BTOR2 file or load the example');
+setStatus('Ready \u2014 upload a BTOR2 file or load the example');
