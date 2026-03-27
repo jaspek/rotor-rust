@@ -33,6 +33,7 @@ impl Btor2Builder {
     }
 
     fn intern(&mut self, op: Op, comment: Option<String>) -> NodeId {
+        #[allow(clippy::collapsible_if)]
         if self.enable_cse {
             if let Some(&existing) = self.dedup.get(&op) {
                 return existing;

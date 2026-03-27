@@ -62,6 +62,7 @@ impl Btor2Printer {
                 continue; // Will be inserted before its init
             }
             let node = builder.node_by_index(idx);
+            #[allow(clippy::collapsible_if)]
             if let Op::Init { state, .. } = &node.op {
                 if relocate.contains(&state.index()) {
                     final_order.push(state.index()); // Insert state just before init
@@ -325,6 +326,7 @@ impl Btor2Printer {
             }
         }
 
+        #[allow(clippy::collapsible_if)]
         if self.print_comments {
             if let Some(ref comment) = node.comment {
                 write!(out, " ; {}", comment)?;
