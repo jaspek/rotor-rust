@@ -136,6 +136,7 @@ An interactive web-based graph viewer for BTOR2 hardware models with witness tra
 - **Category clumping**: Group logic, state, memory, or constant nodes into single meta-nodes
 - **Longest path highlighting**: Visualize the critical path through the model
 - **Witness trace animation**: Step-by-step playback of btormc counterexample traces
+- **Export**: PNG and SVG graph export
 - **Search**: Find nodes by ID, operation, or name
 - **Node shapes by category**: Octagon (bad), diamond (constant), barrel (input), pentagon (memory), hexagon (constraint)
 
@@ -180,7 +181,8 @@ Then load the `.wit` file in the visualizer using "Load Trace" or click "Example
 | `examples/simple-assignment-1-35.btor2` | Rotor output for a simple C program (~1142 nodes) |
 | `examples/counter-with-input.btor2` | Small counter model with state + input (19 nodes) |
 | `examples/counter-with-input.wit` | Real btormc witness trace (6 steps, counter overflow) |
-| `examples/division-by-zero-c.wit` | Real btormc witness trace (77 steps, from C rotor) |
+| `examples/simple-assignment-1-35.wit` | Synthetic witness trace (34 steps) |
+| `examples/division-by-zero-c.wit` | Real btormc witness trace (77 steps, C rotor division-by-zero) |
 
 ## Benchmarks
 
@@ -241,6 +243,7 @@ The generated BTOR2 models can be verified with:
 | [Cytoscape.js](https://js.cytoscape.org/) | Graph rendering and interaction |
 | [dagre](https://github.com/dagrejs/dagre) | Hierarchical graph layout |
 | [cytoscape-dagre](https://github.com/cytoscape/cytoscape.js-dagre) | Cytoscape-dagre integration |
+| [cytoscape-svg](https://github.com/kinimesi/cytoscape-svg) | SVG graph export |
 
 ## References
 

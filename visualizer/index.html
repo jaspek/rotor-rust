@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BTOR2 Visualizer</title>
-    <link rel="stylesheet" href="css/style.css?v=6">
+    <link rel="stylesheet" href="css/style.css?v=7">
 </head>
 <body>
     <div class="app">
@@ -143,6 +143,8 @@
                 <button class="btn" id="btn-zoom-out" title="Zoom out">&minus;</button>
                 <button class="btn" id="btn-fit" title="Fit graph">Fit</button>
                 <button class="btn" id="btn-clear-highlight" title="Clear highlights">Clear</button>
+                <button class="btn" id="btn-export-png" title="Export as PNG">PNG</button>
+                <button class="btn" id="btn-export-svg" title="Export as SVG">SVG</button>
             </div>
             <!-- Legend overlay -->
             <div class="legend" id="legend">
@@ -209,12 +211,13 @@
     <script src="https://unpkg.com/cytoscape@3.30.4/dist/cytoscape.min.js"></script>
     <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
     <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+    <script src="https://unpkg.com/cytoscape-svg@0.4.0/cytoscape-svg.js"></script>
 
     <!-- App Scripts -->
-    <script src="js/parser.js?v=6"></script>
-    <script src="js/graph.js?v=6"></script>
-    <script src="js/witness.js?v=6"></script>
-    <script src="js/witness-player.js?v=6"></script>
-    <script src="js/app.js?v=6"></script>
+    <script src="js/parser.js?v=7"></script>
+    <script src="js/graph.js?v=7"></script>
+    <script src="js/witness.js?v=7"></script>
+    <script src="js/witness-player.js?v=7"></script>
+    <script src="js/app.js?v=7"></script>
 </body>
 </html>
