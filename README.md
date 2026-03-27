@@ -1,5 +1,7 @@
 # Rotor (Rust)
 
+[![CI](https://github.com/jaspek/rotor-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/jaspek/rotor-rust/actions/workflows/ci.yml)
+
 A BTOR2 model generator for RISC-V machines, rewritten in Rust from the [selfie project](https://github.com/cksystemsteaching/selfie).
 
 Rotor translates RISC-V ELF binaries into [BTOR2](https://link.springer.com/chapter/10.1007/978-3-319-96145-3_32) format for formal verification via bounded model checking. This project also includes **symbolic argv support** for verifying programs with arbitrary command-line inputs and an **interactive web-based BTOR2 visualizer** with witness trace animation.
@@ -140,7 +142,11 @@ An interactive web-based graph viewer for BTOR2 hardware models with witness tra
 - **Search**: Find nodes by ID, operation, or name
 - **Node shapes by category**: Octagon (bad), diamond (constant), barrel (input), pentagon (memory), hexagon (constraint)
 
-### Running the Visualizer
+### Live Demo
+
+**[Try the visualizer online](https://jaspek.github.io/rotor-rust/)** — no installation needed.
+
+### Running Locally
 
 ```bash
 # Serve the visualizer directory with any HTTP server
