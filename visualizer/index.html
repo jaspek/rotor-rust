@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BTOR2 Visualizer</title>
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css?v=3">
 </head>
 <body>
     <div class="app">
@@ -29,7 +29,48 @@
             </div>
 
             <div class="panel-section">
-                <h3>Filters</h3>
+                <h3>Witness Trace</h3>
+                <div class="btn-group">
+                    <button class="btn" id="btn-witness-upload">&#128202; Load Trace</button>
+                    <button class="btn" id="btn-witness-paste">&#128203; Paste</button>
+                    <button class="btn" id="btn-witness-example">&#9889; Example</button>
+                </div>
+                <input type="file" id="witness-file-input" accept=".wit,.witness,.txt,.out">
+                <div class="witness-controls hidden" id="witness-controls">
+                    <div class="witness-step-display">
+                        Step <span id="witness-step">0</span> / <span id="witness-total">0</span>
+                    </div>
+                    <div class="witness-playback">
+                        <button class="btn witness-btn" id="btn-witness-start" title="Go to start">&#9198;</button>
+                        <button class="btn witness-btn" id="btn-witness-back" title="Step back">&#9664;</button>
+                        <button class="btn witness-btn witness-btn-play" id="btn-witness-play" title="Play/Pause">&#9654;</button>
+                        <button class="btn witness-btn" id="btn-witness-fwd" title="Step forward">&#9654;</button>
+                        <button class="btn witness-btn" id="btn-witness-end" title="Go to end">&#9197;</button>
+                    </div>
+                    <div class="witness-speed-row">
+                        <label for="witness-speed">Speed:</label>
+                        <input type="range" id="witness-speed" min="100" max="3000" value="1000" step="100">
+                        <span id="witness-speed-label">1.0s</span>
+                    </div>
+                    <button class="btn witness-btn-close" id="btn-witness-close" title="Close trace">&#10005; Close</button>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <h3>Subgraph Root</h3>
+                <div class="subgraph-info" id="subgraph-info">
+                    <span class="text-muted">Showing full graph</span>
+                </div>
+                <select class="select-root" id="select-root">
+                    <option value="">Full graph</option>
+                </select>
+                <div class="btn-group" style="margin-top: 4px;">
+                    <button class="btn btn-small" id="btn-longest-path" title="Show longest path">Longest Path</button>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <h3>View Options</h3>
                 <div class="filter-row">
                     <input type="checkbox" id="filter-sorts" checked>
                     <label for="filter-sorts">Hide sort nodes</label>
@@ -37,6 +78,27 @@
                 <div class="filter-row">
                     <input type="checkbox" id="filter-consts">
                     <label for="filter-consts">Hide constants</label>
+                </div>
+                <div class="collapsible-header" id="clump-header">
+                    <span>&#9660;</span> Clumping
+                </div>
+                <div class="clump-options" id="clump-options">
+                    <div class="filter-row">
+                        <input type="checkbox" id="clump-logic">
+                        <label for="clump-logic">Clump logic nodes</label>
+                    </div>
+                    <div class="filter-row">
+                        <input type="checkbox" id="clump-state">
+                        <label for="clump-state">Clump state nodes</label>
+                    </div>
+                    <div class="filter-row">
+                        <input type="checkbox" id="clump-memory">
+                        <label for="clump-memory">Clump memory nodes</label>
+                    </div>
+                    <div class="filter-row">
+                        <input type="checkbox" id="clump-constant">
+                        <label for="clump-constant">Clump constants</label>
+                    </div>
                 </div>
             </div>
 
@@ -64,6 +126,18 @@
                 <button class="btn" id="btn-zoom-out" title="Zoom out">&minus;</button>
                 <button class="btn" id="btn-fit" title="Fit graph">Fit</button>
                 <button class="btn" id="btn-clear-highlight" title="Clear highlights">Clear</button>
+            </div>
+            <!-- Legend overlay -->
+            <div class="legend" id="legend">
+                <div class="legend-title">Legend</div>
+                <div class="legend-item"><span class="legend-swatch" style="background:#1e4a2e; border-color:#3a9a5a;"></span>state</div>
+                <div class="legend-item"><span class="legend-swatch" style="background:#2a3a5a; border-color:#5a8abb;"></span>input</div>
+                <div class="legend-item"><span class="legend-swatch" style="background:#5a1a1a; border-color:#dd4444;"></span>bad</div>
+                <div class="legend-item"><span class="legend-swatch" style="background:#4a4a1a; border-color:#bbbb3a;"></span>constraint</div>
+                <div class="legend-item"><span class="legend-swatch" style="background:#4a3a1a; border-color:#aa8a3a;"></span>memory</div>
+                <div class="legend-item"><span class="legend-swatch" style="background:#2e2e36; border-color:#555566;"></span>logic</div>
+                <div class="legend-item"><span class="legend-swatch" style="background:#2a3a50; border-color:#4a7aaa;"></span>constant</div>
+                <div class="legend-item"><span class="legend-swatch" style="background:#3a2a50; border-color:#8a6ab0;"></span>clump</div>
             </div>
         </main>
 
@@ -102,14 +176,28 @@
         </div>
     </div>
 
+    <!-- Witness Paste Overlay -->
+    <div class="paste-overlay hidden" id="witness-paste-overlay">
+        <div class="paste-dialog">
+            <h3>Paste Witness Trace</h3>
+            <textarea id="witness-paste-textarea" placeholder="Paste btormc witness output here...&#10;&#10;Example:&#10;sat&#10;b0&#10;@0&#10;0 0000000000000000&#10;#0&#10;@1&#10;...&#10;."></textarea>
+            <div class="btn-group">
+                <button class="btn" id="btn-witness-paste-cancel">Cancel</button>
+                <button class="btn btn-primary" id="btn-witness-paste-confirm">Load</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Dependencies (CDN) -->
     <script src="https://unpkg.com/cytoscape@3.30.4/dist/cytoscape.min.js"></script>
     <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
     <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
 
     <!-- App Scripts -->
-    <script src="js/parser.js"></script>
-    <script src="js/graph.js"></script>
-    <script src="js/app.js"></script>
+    <script src="js/parser.js?v=3"></script>
+    <script src="js/graph.js?v=3"></script>
+    <script src="js/witness.js?v=3"></script>
+    <script src="js/witness-player.js?v=3"></script>
+    <script src="js/app.js?v=3"></script>
 </body>
 </html>
