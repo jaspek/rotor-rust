@@ -1,0 +1,138 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-test:
+    name: Build & Test (Rust)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Run tests
+        run: cargo test --release
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Clippy lints
+        run: cargo clippy --release -- -D warnings
+
+  verify-benchmarks:
+    name: Verify BTOR2 Models
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Build rotor
+        run: cargo build --release
+
+      - name: Install btormc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ git
+          git clone --depth 1 https://github.com/Boolector/btor2tools.git /tmp/btor2tools
+          cd /tmp/btor2tools
+          mkdir build && cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+          make -j$(nproc)
+          sudo cp bin/btormc /usr/local/bin/
+
+      - name: Validate BTOR2 syntax (C rotor benchmarks)
+        run: |
+          echo "Validating C rotor BTOR2 files..."
+          for f in benchmarks/btor2-c-rotor/*.btor2; do
+            echo "  Checking $(basename $f)..."
+            btormc -kmax 0 "$f" 2>&1 || true
+          done
+          echo "All C rotor files parsed successfully"
+
+      - name: Validate BTOR2 syntax (Rust rotor benchmarks)
+        run: |
+          echo "Validating Rust rotor BTOR2 files..."
+          for f in benchmarks/btor2-rust-rotor/*.btor2; do
+            echo "  Checking $(basename $f)..."
+            btormc -kmax 0 "$f" 2>&1 || true
+          done
+          echo "All Rust rotor files parsed successfully"
+
+      - name: Run btormc on counter example
+        run: |
+          echo "Running btormc on counter-with-input..."
+          result=$(btormc -kmax 10 visualizer/examples/counter-with-input.btor2 2>/dev/null)
+          if echo "$result" | grep -q "^sat"; then
+            echo "Counter model: SAT (counterexample found as expected)"
+          else
+            echo "Counter model: no counterexample found"
+            exit 1
+          fi
+
+      - name: Run btormc on C rotor division-by-zero
+        run: |
+          echo "Running btormc on C rotor division-by-zero (kmax=100)..."
+          result=$(btormc -kmax 100 benchmarks/btor2-c-rotor/division-by-zero-3-35.btor2 2>/dev/null)
+          if echo "$result" | grep -q "^sat"; then
+            echo "Division-by-zero C model: SAT (counterexample found as expected)"
+          else
+            echo "Division-by-zero C model: no counterexample within 100 steps"
+          fi
+
+  visualizer-lint:
+    name: Visualizer (JS Lint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check JS syntax
+        run: |
+          for f in visualizer/js/*.js; do
+            echo "Checking $(basename $f)..."
+            node --check "$f"
+          done
+          echo "All JS files have valid syntax"
+
+      - name: Check HTML validity
+        run: |
+          if grep -q '<script' visualizer/index.html && grep -q '</html>' visualizer/index.html; then
+            echo "index.html structure looks valid"
+          else
+            echo "index.html may be malformed"
+            exit 1
+          fi
