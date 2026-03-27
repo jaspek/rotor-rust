@@ -189,6 +189,7 @@ Then load the `.wit` file in the visualizer using "Load Trace" or click "Example
 | `examples/counter-with-input.wit` | Real btormc witness trace (6 steps, counter overflow) |
 | `examples/simple-assignment-1-35.wit` | Synthetic witness trace (34 steps) |
 | `examples/division-by-zero-c.wit` | Real btormc witness trace (77 steps, C rotor division-by-zero) |
+| `examples/division-by-zero-rust.wit` | Real btormc witness trace (111 steps, Rust rotor seg-fault) |
 
 ## Benchmarks
 
