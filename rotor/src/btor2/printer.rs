@@ -73,10 +73,8 @@ impl Btor2Printer {
 
         // Assign sequential nids
         let mut nid_map: Vec<u32> = vec![0; count + 1];
-        let mut next_nid: u32 = 1;
-        for &idx in &final_order {
+        for (next_nid, &idx) in (1_u32..).zip(final_order.iter()) {
             nid_map[idx] = next_nid;
-            next_nid += 1;
         }
 
         // Print
