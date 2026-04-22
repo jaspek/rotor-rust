@@ -5,10 +5,12 @@
 .claude/
 rotor.c
 
-# Thesis direction proposal — distributed as a GitHub release, not in-tree
+# Local-only PDFs (course paper is published as a GitHub release asset)
+Advanced_System_Engineering*.pdf
+Thesis_Direction_Proposal.pdf
+Thesis_Proposal_*.pdf
 thesis_proposal.*
 thesis_idea.pdf
-Thesis_Proposal_*.pdf
 Deliverable.pdf
 
 # LaTeX build artifacts

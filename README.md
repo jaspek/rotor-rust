@@ -33,7 +33,7 @@ We address the three obstacles in three parts:
 
 Code for each part lives in its own subdirectory: `rotor/`, `benchmarks/argv-tests/`, and `visualizer/`.
 
-Deliverables (slides, reports) are in the repository root: `Final_Report.pdf`, `Rotor_Overview.pdf`, `Rotor_Presentation.pdf`, `Symbolic_Arguments_Presentation.pdf`, `paper.tex`. The thesis-direction write-up is distributed via the [GitHub releases page](../../releases) (it is unrelated to this course project).
+Deliverables (slides, reports) are in the repository root: `Final_Report.pdf`, `Rotor_Overview.pdf`, `Rotor_Presentation.pdf`, `Symbolic_Arguments_Presentation.pdf`, `paper.tex`. The full course paper is also published as a PDF asset on the [GitHub releases page](../../releases).
 
 ---
 
