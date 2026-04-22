@@ -2,26 +2,48 @@
 
 [![CI](https://github.com/jaspek/rotor-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/jaspek/rotor-rust/actions/workflows/ci.yml)
 
-A BTOR2 model generator for RISC-V machines, rewritten in Rust from the [selfie project](https://github.com/cksystemsteaching/selfie).
-
-Rotor translates RISC-V ELF binaries into [BTOR2](https://link.springer.com/chapter/10.1007/978-3-319-96145-3_32) format for formal verification via bounded model checking. This project also includes **symbolic argv support** for verifying programs with arbitrary command-line inputs and an **interactive web-based BTOR2 visualizer** with witness trace animation.
-
 > **University of Salzburg** — Advanced Systems Engineering
 > Jasmin Begic & Daniel Wassie, supervised by Prof. Christoph Kirsch
 
-## Project Structure
+---
 
-This project consists of three parts:
+## Problem
 
-| Part | Description | Location |
-|------|-------------|----------|
-| **Part 1** | Rust rewrite of Rotor (BTOR2 model generator) | `rotor/` |
-| **Part 2** | Symbolic argv support for input-dependent verification | `benchmarks/argv-tests/` |
-| **Part 3** | Interactive BTOR2 web visualizer | `visualizer/` |
+Formal verification of low-level software relies on tools that translate a compiled program into a mathematical model, which a solver can then check against safety properties up to a bounded execution depth. In practice, three obstacles make this workflow hard to use.
 
-## Part 1: Rotor in Rust
+First, the existing translator for RISC-V binaries is a large, monolithic C program — difficult to read, extend, or reason about, and awkward to integrate with modern toolchains. Second, the generated models only let a solver explore inputs the program reads from standard input; bugs that depend on **command-line arguments** are structurally unreachable, even though a real operating system would expose those bytes to the program. Third, when the solver does find a counterexample, its output is a flat textual trace that is effectively unreadable without intimate knowledge of the model format — the result, however correct, is inaccessible to anyone who did not build the tool.
 
-### Features
+Taken together, these three obstacles limit who can use bounded model checking on real binaries, what bugs it can find, and what a user can do with the answer once they have it.
+
+## Approach
+
+We address the three obstacles in three parts:
+
+1. We **re-implement the translator in Rust**, replacing the monolithic C codebase with a modular crate that is easier to maintain, extend, and audit.
+2. We **extend the generated model so that command-line arguments can be left symbolic**, letting the solver search over them instead of over stdin alone.
+3. We **build a browser-based visualizer** that takes the solver's counterexample and shows, step by step, which instruction fires and which memory or register state changes — so the verification result becomes something a non-expert can actually read.
+
+## Status
+
+| Part | Scope | Status |
+|------|-------|:------:|
+| 1 | Rust rewrite of the translator | **Complete** — generates BTOR2 models semantically equivalent to the C reference on 18 test programs. |
+| 2 | Symbolic argv support | **Complete** — 5 benchmark programs, each with a bug reachable *only* via argv, are discovered by btormc. |
+| 3 | Witness-trace visualizer | **In progress** — loads real btormc witness traces, supports depth-limited subgraphs and cone-of-influence views; per-step inspector is being polished. |
+
+Code for each part lives in its own subdirectory: `rotor/`, `benchmarks/argv-tests/`, and `visualizer/`.
+
+Deliverables (slides, reports) are in the repository root: `Final_Report.pdf`, `Rotor_Overview.pdf`, `Rotor_Presentation.pdf`, `Symbolic_Arguments_Presentation.pdf`, `paper.tex`. The thesis-direction write-up is distributed via the [GitHub releases page](../../releases) (it is unrelated to this course project).
+
+---
+
+## Technical details
+
+The sections below describe each part in more depth. Readers who only want the high-level picture can stop here.
+
+### Part 1: Rotor in Rust
+
+#### Features
 
 - **RISC-V support**: RV32I/RV64I base integer ISA, M extension (multiply/divide), C extension (compressed instructions)
 - **Multi-core**: Configurable number of cores
@@ -31,14 +53,14 @@ This project consists of three parts:
 - **HashMap-based CSE**: O(1) common subexpression elimination (vs O(n) in the C original)
 - **Arena allocation**: Cache-friendly node storage with stable indices
 
-### Building
+#### Building
 
 ```bash
 cd rotor
 cargo build --release
 ```
 
-### Usage
+#### Usage
 
 ```bash
 # Generate BTOR2 model from a RISC-V ELF binary
@@ -60,7 +82,7 @@ rotor --synthesis -o model.btor2
 rotor <binary.elf> --comments
 ```
 
-### Architecture
+#### Architecture
 
 ```
 rotor/src/
@@ -91,7 +113,7 @@ rotor/src/
     generator.rs       Top-level model generation pipeline
 ```
 
-### Pipeline
+#### Pipeline
 
 1. **Load** ELF binary (code + data segments)
 2. **Initialize** BTOR2 sorts and machine constants
@@ -101,11 +123,11 @@ rotor/src/
 6. **Generate** safety properties (bad states)
 7. **Print** BTOR2 model
 
-## Part 2: Symbolic argv
+### Part 2: Symbolic argv
 
 Extends Rotor to support verification of programs with symbolic command-line arguments. Instead of concrete input values, `argv` entries are modeled as unconstrained symbolic bitvectors, allowing the model checker to explore all possible inputs.
 
-### Test Programs
+#### Test Programs
 
 Five C test programs in `benchmarks/argv-tests/` exercise different input-dependent behaviors:
 
@@ -117,18 +139,18 @@ Five C test programs in `benchmarks/argv-tests/` exercise different input-depend
 | `test4_multi_arg.c` | Multiple argument interaction |
 | `test5_checksum.c` | Checksum computation over input bytes |
 
-### Generating argv Models
+#### Generating argv Models
 
 ```bash
 # Compile with selfie, then generate BTOR2 with symbolic argv
 rotor <binary.elf> --symbolic-argv -o model-argv.btor2
 ```
 
-## Part 3: BTOR2 Visualizer
+### Part 3: BTOR2 Visualizer
 
 An interactive web-based graph viewer for BTOR2 hardware models with witness trace animation.
 
-### Features
+#### Features
 
 - **Graph visualization**: Renders BTOR2 models as interactive node graphs using Cytoscape.js
 - **Dual layout modes**: Hierarchical (dagre) and force-directed (cose) layouts
@@ -142,11 +164,11 @@ An interactive web-based graph viewer for BTOR2 hardware models with witness tra
 - **Search**: Find nodes by ID, operation, or name
 - **Node shapes by category**: Octagon (bad), diamond (constant), barrel (input), pentagon (memory), hexagon (constraint)
 
-### Live Demo
+#### Live Demo
 
 **[Try the visualizer online](https://jaspek.github.io/rotor-rust/)** — no installation needed.
 
-### Running Locally
+#### Running Locally
 
 ```bash
 # Serve the visualizer directory with any HTTP server
@@ -156,13 +178,13 @@ python -m http.server 8080
 # Then open http://localhost:8080 in your browser
 ```
 
-### Loading Models
+#### Loading Models
 
 - **Upload**: Click "Upload" to load a `.btor2` file from disk
 - **Paste**: Click "Paste" to paste BTOR2 text directly
 - **Example**: Click "Example" to load a bundled example model
 
-### Witness Trace Playback
+#### Witness Trace Playback
 
 The visualizer can animate counterexample witness traces produced by [btormc](https://github.com/Boolector/btor2tools):
 
@@ -180,7 +202,7 @@ Then load the `.wit` file in the visualizer using "Load Trace" or click "Example
 
 **Playback controls**: Play/pause, step forward/back, jump to start/end, adjustable speed. Keyboard shortcuts: Arrow keys (step), Space (play/pause), Home/End (jump).
 
-### Example Files
+#### Example Files
 
 | File | Description |
 |------|-------------|
@@ -191,7 +213,7 @@ Then load the `.wit` file in the visualizer using "Load Trace" or click "Example
 | `examples/division-by-zero-c.wit` | Real btormc witness trace (77 steps, C rotor division-by-zero) |
 | `examples/division-by-zero-rust.wit` | Real btormc witness trace (111 steps, Rust rotor seg-fault) |
 
-## Benchmarks
+### Benchmarks
 
 Pre-generated BTOR2 models for 17+ selfie test programs:
 
@@ -204,7 +226,7 @@ benchmarks/
   Dockerfile.btormc     Docker setup for btormc model checker
 ```
 
-### Running Benchmarks
+#### Running Benchmarks
 
 ```bash
 cd benchmarks
@@ -226,7 +248,7 @@ docker run --rm --entrypoint /bin/bash \
   -c "btormc -kmax 100 /work/model.btor2"
 ```
 
-## Rust vs C Rotor: Model Comparison
+### Rust vs C Rotor: Model Comparison
 
 Both the Rust and C implementations of Rotor generate valid BTOR2 models that btormc can verify. The Rust rewrite produces more compact models with a different initialization encoding:
 
@@ -242,15 +264,15 @@ The C rotor uses **phased initialization** — separate `zeroed-code-segment` an
 
 Both produce semantically equivalent results: btormc finds counterexamples in both. The Rust model requires a higher `kmax` bound because its compact encoding results in more unrolling steps for the solver, but the generated models are ~3.5x smaller.
 
-## Verification
+### Verification
 
 The generated BTOR2 models can be verified with:
 - [btormc](https://github.com/Boolector/btor2tools) — BTOR2 bounded model checker
 - [Bitwuzla](https://bitwuzla.github.io/) — SMT solver with BTOR2 support
 
-## Dependencies
+### Dependencies
 
-### Rust (rotor)
+#### Rust (rotor)
 
 | Crate | Purpose |
 |-------|---------|
@@ -259,7 +281,7 @@ The generated BTOR2 models can be verified with:
 | `thiserror` | Error types |
 | `log` + `env_logger` | Debug logging |
 
-### Visualizer (CDN)
+#### Visualizer (CDN)
 
 | Library | Purpose |
 |---------|---------|
@@ -268,13 +290,13 @@ The generated BTOR2 models can be verified with:
 | [cytoscape-dagre](https://github.com/cytoscape/cytoscape.js-dagre) | Cytoscape-dagre integration |
 | [cytoscape-svg](https://github.com/kinimesi/cytoscape-svg) | SVG graph export |
 
-## References
+### References
 
 - [Selfie project](https://github.com/cksystemsteaching/selfie) — Original C implementation
 - [BTOR2 format](https://link.springer.com/chapter/10.1007/978-3-319-96145-3_32) — BTOR2, BtorMC and Boolector 3.0
 - [Agent-BiTR](https://github.com/cksystemsgroup/agent-bitr) — Related work on agent-based bounded model checking
 - Diller (2022) — *Visualizing BTOR2 Models* (thesis, inspiration for visualizer features)
 
-## License
+### License
 
 See the [selfie project](https://github.com/cksystemsteaching/selfie) for licensing details.

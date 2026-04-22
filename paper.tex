@@ -1,0 +1,253 @@
+\documentclass[conference]{IEEEtran}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  frame=single,
+  columns=fullflexible,
+  keepspaces=true,
+}
+
+\title{Rotor in Rust: A BTOR2 Model Generator for RISC-V with Symbolic Inputs and Interactive Model Visualization}
+
+\author{
+\IEEEauthorblockN{Jasmin Begic, Daniel Wassie}
+\IEEEauthorblockA{Advanced Systems Engineering (ASE2026)\\
+Paris Lodron University of Salzburg\\
+Salzburg, Austria}
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This paper presents a Rust reimplementation of Rotor, the BTOR2 model generator from the Selfie project, together with two extensions: symbolic argv modeling for input-dependent program verification, and an interactive web-based BTOR2 visualizer with witness trace animation. The Rust rewrite produces models 3.5$\times$ smaller than the reference C implementation while preserving semantic equivalence verified through btormc bounded model checking. The visualizer supports hierarchical and force-directed layouts, cone-of-influence subgraphs, depth-limited exploration, node collapse and category clumping, and step-by-step playback of counterexample witness traces. We describe the architecture of all three components, compare model output against the reference implementation, and report verification results across 18 benchmark programs.
+\end{abstract}
+
+\begin{IEEEkeywords}
+BTOR2, bounded model checking, RISC-V, formal verification, Rust, symbolic execution, model visualization, witness traces
+\end{IEEEkeywords}
+
+\bigskip
+\noindent\fbox{\parbox{0.95\columnwidth}{
+\textbf{PROJECT CONTEXT}\\[2pt]
+\begin{tabular}{@{}ll@{}}
+Supervisor: & Univ.-Prof. Dipl.-Inform. Dr.-Ing. Christoph Kirsch \\
+Course: & ASE2026 (Advanced Systems Engineering) \\
+University: & Paris Lodron University of Salzburg \\
+Date: & 2026-03-31 \\
+Repository: & \texttt{github.com/jaspek/rotor-rust} \\
+\end{tabular}
+}}
+
+\section{Introduction}
+
+Rotor is the BTOR2 model generator of the Selfie project~\cite{selfie}, translating RISC-V ELF binaries into transition systems suitable for bounded model checking. The original implementation in C generates correct models but suffers from linear-time common subexpression elimination and a monolithic code structure that limits extensibility.
+
+This project makes three contributions. First, we rewrite Rotor in Rust with $O(1)$ HashMap-based CSE, arena allocation, and a modular architecture separating BTOR2 IR construction, RISC-V decoding, machine state modeling, and property generation. Second, we extend the tool with symbolic argv support, allowing verification of programs whose behavior depends on command-line input. Third, we build an interactive web-based BTOR2 visualizer with features inspired by Diller~\cite{diller}, including witness trace animation, subgraph views, and node clumping.
+
+All three components are integrated in a single repository with a CI pipeline that builds the Rust code, lints the visualizer, and verifies BTOR2 model well-formedness on every commit.
+
+\section{Background}
+
+\subsection{BTOR2 Format}
+
+BTOR2~\cite{btor2} is a word-level format for hardware-like transition systems. Each line declares a node identified by a positive integer (nid). Nodes represent sorts (bitvector, array), constants, operators, states with init/next functions, inputs, and safety properties (bad states). A bounded model checker such as btormc~\cite{btor2tools} unrolls the transition relation for $k$ steps and queries an SMT solver for reachability of bad states.
+
+\subsection{Rotor and the Selfie Project}
+
+The Selfie project~\cite{selfie} provides a self-contained educational RISC-V toolchain: compiler, emulator, and formal verification tools. Rotor generates BTOR2 models from RISC-V binaries compiled by Selfie, encoding the processor state (PC, registers, segmented memory) and kernel syscall behavior as a transition system with safety properties for exit codes, division by zero, and segmentation faults.
+
+\subsection{Witness Traces}
+
+When btormc finds a reachable bad state, it produces a witness trace: a sequence of state and input assignments at each time step that drives the system from its initial state to the property violation. The trace format uses binary-encoded bitvector values indexed by state and input declaration order.
+
+\section{Part 1: Rotor in Rust}
+
+\subsection{Architecture}
+
+The Rust implementation is organized into four modules totaling 6,839 lines across 25 source files:
+
+\textbf{btor2/} (1,388 lines) --- BTOR2 IR builder with HashMap-based common subexpression elimination, node types (Op enum with 30+ variants), sort definitions, and a topological-order printer.
+
+\textbf{riscv/} (1,839 lines) --- RV32I/RV64I instruction decode, M extension (multiply/divide), C extension (compressed instructions), ELF loading via the \texttt{goblin} crate, and ISA constant definitions.
+
+\textbf{machine/} (2,027 lines) --- Machine sorts and constants, register file model, segmented memory (code, data, heap, stack), kernel state for syscall modeling (\texttt{exit}, \texttt{read}, \texttt{write}, \texttt{openat}, \texttt{brk}), and per-core state composition.
+
+\textbf{model/} (1,339 lines) --- Combinational logic generation (fetch, decode, ALU, control flow), sequential logic (next-state for PC, registers, memory), safety property generation, and the top-level pipeline orchestrator.
+
+\subsection{Key Design Decisions}
+
+\textbf{HashMap CSE.} The C implementation uses linear scans to detect duplicate subexpressions. The Rust version hashes each node's operator and operands, achieving $O(1)$ amortized lookup. This eliminates redundant node creation across all builder call sites.
+
+\textbf{Arena allocation.} All BTOR2 nodes are stored in a contiguous \texttt{Vec}, with \texttt{NodeId} indices providing stable references. This yields cache-friendly traversal and avoids reference-counting overhead.
+
+\textbf{Direct initialization.} Unlike the C version, which uses phased initialization (zeroed states followed by loaded states over multiple time steps), the Rust version encodes binary data directly in \texttt{init} statements. This produces more compact models but requires more unrolling steps for the solver.
+
+\subsection{Model Comparison}
+
+Table~\ref{tab:comparison} compares the BTOR2 output for the division-by-zero benchmark across both implementations.
+
+\begin{table}[h]
+\centering
+\caption{Model comparison for division-by-zero-3-35}
+\label{tab:comparison}
+\begin{tabular}{lll}
+\toprule
+\textbf{Aspect} & \textbf{C Rotor} & \textbf{Rust Rotor} \\
+\midrule
+Model size & 4,163 lines & 1,176 lines \\
+Nodes & 3,966 & 1,176 \\
+Bad properties & 24 & 3 \\
+States & 14 & 13 \\
+Initialization & Phased (multi-step) & Direct (init stmt) \\
+btormc counterexample & Step 77 (kmax 100) & Step 111 (kmax 200) \\
+Size ratio & 1.0$\times$ (baseline) & 3.5$\times$ smaller \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Both implementations produce semantically equivalent results: btormc finds counterexamples in both. The Rust model requires a higher kmax bound (200 vs 100) because the direct initialization encoding results in more unrolling steps, but the generated models are 3.5$\times$ smaller.
+
+\section{Part 2: Symbolic Argv}
+
+Standard Rotor models use concrete initial values. To verify programs whose behavior depends on command-line arguments, we extend the model generator to treat argv entries as unconstrained symbolic bitvectors. This allows the bounded model checker to explore all possible input combinations within the given bound.
+
+\subsection{Implementation}
+
+When symbolic argv mode is enabled, the model generator replaces concrete argv memory contents with BTOR2 \texttt{input} nodes. Each byte of each argument string becomes a fresh symbolic input, while \texttt{argc} and the pointer array structure remain concrete. The kernel \texttt{read} syscall path is similarly extended to support symbolic file input.
+
+\subsection{Test Programs}
+
+We developed five C test programs exercising different input-dependent behaviors:
+
+\begin{enumerate}
+\item \textbf{String comparison crash} --- triggers a fault when a specific input string is provided.
+\item \textbf{Numeric overflow} --- integer overflow from parsed command-line input.
+\item \textbf{Length-dependent control flow} --- behavior changes based on argument length.
+\item \textbf{Multi-argument interaction} --- combined effect of multiple argv entries.
+\item \textbf{Checksum computation} --- checksum over input bytes with overflow detection.
+\end{enumerate}
+
+Each program is compiled with Selfie and modeled both with and without symbolic argv, producing 18 argv-enabled BTOR2 benchmarks across the full test suite of 18 programs.
+
+\section{Part 3: BTOR2 Visualizer}
+
+To support understanding and debugging of BTOR2 models, we built an interactive web-based visualizer using Cytoscape.js~\cite{cytoscape} with 3,065 lines of JavaScript, HTML, and CSS. The visualizer renders models as node graphs with category-specific shapes, supports multiple layout algorithms, and can animate witness trace playback.
+
+\subsection{Graph Rendering}
+
+The parser reads BTOR2 text and builds a node map with operand edges. Nodes are classified into categories (logic, state, input, constant, memory, bad, constraint) and rendered with distinct shapes: octagons for bad states, diamonds for constants, barrels for inputs, pentagons for memory, and hexagons for constraints.
+
+\subsection{Layout Modes}
+
+Two layout algorithms are available. The \textbf{hierarchical layout} (dagre) places nodes in ranked layers with bottom-to-top flow, suitable for understanding data dependencies. The \textbf{force-directed layout} (cose) uses spring-electric simulation for organic clustering, useful for identifying structural patterns in large models. In force mode, nodes are draggable for manual arrangement.
+
+\subsection{Subgraph and Depth Control}
+
+The cone-of-influence view shows only the transitive dependencies of a selected root node (typically a bad property). A depth slider limits the BFS traversal depth, allowing progressive exploration from a root node outward. On the division-by-zero model, selecting the segmentation-fault property reduces the visible graph from 1,176 to approximately 350 nodes.
+
+\subsection{Collapse, Clumping, and Longest Path}
+
+Following Diller~\cite{diller}, double-clicking a node collapses its entire subtree into a single node showing the hidden descendant count. Category clumping groups all nodes of the same type (e.g., all logic operations) into a single meta-node with dashed edges, dramatically reducing visual complexity. On the division-by-zero subgraph, clumping logic and constant nodes reduces 356 visible nodes to approximately 8. Longest-path highlighting uses DFS with memoization to identify the critical path through the model.
+
+\subsection{Witness Trace Animation}
+
+The visualizer parses btormc witness traces and provides step-by-step playback. At each time step, state and input nodes are highlighted with their assigned values (displayed as decimal, hex, or binary), while bad property nodes flash when violated. The player supports play/pause, adjustable speed, forward/backward stepping, and keyboard shortcuts (Arrow keys, Space, Home/End). State and input indices in the witness format are mapped to BTOR2 nids by scanning the model's declarations in order.
+
+\subsection{Export and Deployment}
+
+Graphs can be exported as PNG (rasterized screenshot) or SVG (vector, suitable for papers and presentations). The visualizer is deployed to GitHub Pages and requires no installation --- users can load any BTOR2 file via upload, paste, or URL.
+
+\section{Verification and CI}
+
+The CI pipeline runs three jobs on every push:
+\begin{enumerate}
+\item \textbf{Rust build and lint} --- \texttt{cargo build}, \texttt{cargo clippy}, \texttt{cargo fmt --check}.
+\item \textbf{Visualizer lint} --- JavaScript syntax validation.
+\item \textbf{BTOR2 model verification} --- well-formedness checks using \texttt{catbtor}/\texttt{btorsim} from btor2tools~\cite{btor2tools}.
+\end{enumerate}
+
+We verified model correctness by running btormc on both Rust and C rotor outputs across benchmark programs. Both implementations produce counterexamples for programs with reachable bad states. Table~\ref{tab:verification} summarizes selected results.
+
+\begin{table}[h]
+\centering
+\caption{btormc verification results (selected benchmarks)}
+\label{tab:verification}
+\begin{tabular}{llll}
+\toprule
+\textbf{Benchmark} & \textbf{C (step)} & \textbf{Rust (step)} & \textbf{Property} \\
+\midrule
+division-by-zero & 77 & 111 & seg-fault \\
+simple-assignment & safe & safe & all safe \\
+invalid-mem-fail & 45 & 89 & seg-fault \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Discussion}
+
+Three engineering outcomes were most significant:
+
+\textbf{1) Compact models require deeper bounds.} The Rust version's direct initialization produces 3.5$\times$ smaller models but requires approximately 2$\times$ more unrolling steps for btormc. This is a deliberate tradeoff: smaller models are faster to parse and transmit, while the additional unrolling cost is absorbed by the solver.
+
+\textbf{2) HashMap CSE enables modular construction.} With $O(1)$ deduplication, the builder can be called from independent modules (combinational, sequential, properties) without concern for redundant node creation. This enabled the clean four-module architecture.
+
+\textbf{3) Visualization reveals model structure.} The subgraph and clumping features proved essential for understanding models with 1000+ nodes. The cone-of-influence view for a single bad property typically reduces visible nodes by 60--70\%, making the dependency structure comprehensible.
+
+\section{Limitations}
+
+The Rust rewrite generates 3 abstract bad properties (exit code, division-by-zero, segmentation fault) compared to 24 granular properties in the C version (per-instruction-type checks). This is sufficient for detecting violations but provides less diagnostic precision.
+
+The symbolic argv implementation models argument bytes as unconstrained inputs. Real-world constraints (e.g., null-termination, printable ASCII) are not yet modeled, which may lead to spurious counterexamples.
+
+The visualizer's force-directed layout can be slow on models with more than 2,000 nodes. The hierarchical layout remains performant up to approximately 5,000 nodes.
+
+\section{Conclusion}
+
+We presented a Rust reimplementation of the Rotor BTOR2 model generator with two extensions: symbolic argv for input-dependent verification and an interactive web visualizer. The Rust version produces 3.5$\times$ smaller models while maintaining semantic equivalence with the C reference. The visualizer provides multiple complementary views (subgraph, clumping, depth-limited) that make large models tractable, and witness trace animation enables step-by-step inspection of counterexamples.
+
+All components are integrated in a CI-tested repository with 36 Rust BTOR2 benchmarks (18 standard, 18 with symbolic argv), a GitHub Pages deployment of the visualizer, and Docker-based btormc verification.
+
+\section{Outlook}
+
+\textbf{1) Multi-core verification.} The Rust rewrite supports multi-core configuration but concurrent property verification across cores has not been tested. Extending the bad-state properties to reason about inter-core interference is a natural next step.
+
+\textbf{2) Incremental model checking.} The current workflow regenerates the entire BTOR2 model on each invocation. Supporting incremental updates (e.g., when only one function changes) could significantly reduce verification turnaround time.
+
+\textbf{3) Constraint refinement for symbolic argv.} Adding constraints for null-terminated strings, bounded lengths, and character class restrictions would reduce spurious counterexamples and improve practical utility.
+
+\textbf{4) Collaborative visualization.} The web-based visualizer could be extended with shareable URLs encoding model state, enabling collaborative debugging and annotation of BTOR2 models.
+
+\begin{thebibliography}{6}
+
+\bibitem{selfie}
+C.~Kirsch et~al., ``Selfie: A Minimal Self-Contained Educational RISC-V System,'' \url{https://github.com/cksystemsteaching/selfie}
+
+\bibitem{btor2}
+A.~Niemetz, M.~Preiner, C.~Wolf, and A.~Biere, ``BTOR2, BtorMC and Boolector 3.0,'' in \emph{CAV 2018}, LNCS 10981, pp.~587--595, 2018.
+
+\bibitem{btor2tools}
+Boolector contributors, ``btor2tools: Tools for the BTOR2 format,'' \url{https://github.com/Boolector/btor2tools}
+
+\bibitem{diller}
+M.~Diller, ``Visualizing BTOR2 Models,'' Bachelor thesis, University of Salzburg, 2022.
+
+\bibitem{cytoscape}
+M.~Franz et~al., ``Cytoscape.js: A graph theory library for visualisation and analysis,'' \emph{Bioinformatics}, vol.~32, no.~2, 2016.
+
+\bibitem{repo}
+Repository source and artifacts, \url{https://github.com/jaspek/rotor-rust}
+
+\end{thebibliography}
+
+\end{document}

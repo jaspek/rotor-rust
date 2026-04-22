@@ -4,3 +4,21 @@
 .DS_Store
 .claude/
 rotor.c
+
+# Thesis direction proposal — distributed as a GitHub release, not in-tree
+thesis_proposal.*
+thesis_idea.pdf
+Thesis_Proposal_*.pdf
+Deliverable.pdf
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.toc
+
+# Office files: keep PDFs tracked, keep .pptx sources local only
+*.pptx
+
+# Office lock files
+~$*
