@@ -69,6 +69,10 @@ const btnWitnessPasteConfirm = document.getElementById('btn-witness-paste-confir
 const btnWitnessPasteCancel = document.getElementById('btn-witness-paste-cancel');
 const btnWitnessExample = document.getElementById('btn-witness-example');
 
+// Trace panel
+const tracePanel = document.getElementById('trace-panel');
+const traceContent = document.getElementById('trace-content');
+
 // ============ Event Handlers ============
 
 uploadBtn.addEventListener('click', () => fileInput.click());
@@ -103,14 +107,22 @@ btnExportPng.addEventListener('click', () => {
 });
 btnExportSvg.addEventListener('click', () => {
     if (!cy) return;
-    const svgContent = cy.svg({ full: true, scale: 1, bg: '#12131a' });
-    const blob = new Blob([svgContent], { type: 'image/svg+xml' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'btor2-graph.svg';
-    a.click();
-    URL.revokeObjectURL(a.href);
-    setStatus('Exported SVG');
+    if (typeof cy.svg !== 'function') {
+        setStatus('SVG export unavailable — cytoscape-svg plugin failed to load');
+        return;
+    }
+    try {
+        const svgContent = cy.svg({ full: true, scale: 1, bg: '#12131a' });
+        const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'btor2-graph.svg';
+        a.click();
+        URL.revokeObjectURL(a.href);
+        setStatus('Exported SVG');
+    } catch (err) {
+        setStatus('SVG export failed: ' + err.message);
+    }
 });
 
 // Subgraph root selector
@@ -220,6 +232,7 @@ player.onStepChange = (step, total) => {
     witnessStepEl.textContent = step;
     witnessTotalEl.textContent = total - 1;
     updateWitnessDetailPanel(step);
+    updateTracePanel();
     setStatus(`Witness step ${step} of ${total - 1}`);
 };
 player.onStop = () => updatePlayButton();
@@ -254,13 +267,21 @@ function handlePaste() {
 }
 
 async function loadExample() {
-    setStatus('Loading example...');
+    setStatus('Loading Rotor example...');
     try {
-        const resp = await fetch('./examples/simple-assignment-1-35.btor2');
-        const text = await resp.text();
-        loadBtor2(text, 'simple-assignment-1-35.btor2');
+        const modelResp = await fetch('./examples/simple-assignment-1-35.btor2');
+        const modelText = await modelResp.text();
+        loadBtor2(modelText, 'simple-assignment-1-35.btor2');
     } catch (err) {
         setStatus('Failed to load example: ' + err.message);
+        return;
+    }
+    try {
+        const witResp = await fetch('./examples/simple-assignment-1-35.wit');
+        const witText = await witResp.text();
+        loadWitness(witText, 'simple-assignment-1-35.wit');
+    } catch (err) {
+        setStatus('Example loaded (witness unavailable)');
     }
 }
 
@@ -330,6 +351,7 @@ function loadWitness(text, source) {
 
     player.load(witness, parsedNodes, cy);
     witnessControls.classList.remove('hidden');
+    tracePanel.classList.remove('hidden');
     witnessTotalEl.textContent = witness.frames.length - 1;
     witnessStepEl.textContent = '0';
 
@@ -346,8 +368,9 @@ function loadWitness(text, source) {
 function closeWitness() {
     player.unload();
     witnessControls.classList.add('hidden');
+    tracePanel.classList.add('hidden');
     if (cy) {
-        cy.elements().removeClass('witness-active witness-state witness-input witness-bad witness-inactive');
+        cy.elements().removeClass('witness-active witness-state witness-input witness-bad witness-inactive witness-changed');
         cy.nodes().forEach(n => { n.data('witnessValue', null); n.data('witnessLabel', null); });
     }
     setStatus('Witness closed');
@@ -372,8 +395,10 @@ function updatePlayButton() {
 
 function updateWitnessDetailPanel(step) {
     if (!player.loaded) return;
-    const frame = player.witness.frames[step];
-    if (!frame) return;
+
+    const cumStates = player._cumStates || new Map();
+    const cumInputs = player._cumInputs || new Map();
+    const changed = player._changedNids || new Set();
 
     let html = `<div class="detail-header">
         <span class="detail-nid">Step ${step}</span>
@@ -391,28 +416,32 @@ function updateWitnessDetailPanel(step) {
         </div>`;
     }
 
-    if (frame.states.size > 0) {
-        html += `<div class="detail-section">States (${frame.states.size})</div><div class="detail-links">`;
-        for (const [nid, entry] of frame.states) {
+    if (cumStates.size > 0) {
+        html += `<div class="detail-section">States (${cumStates.size})</div><div class="detail-links">`;
+        for (const [nid, entry] of cumStates) {
             const node = parsedNodes.get(nid);
             const name = node ? (node.name || `#${nid}`) : `#${nid}`;
             const value = Array.isArray(entry) ? `[${entry.length} entries]` : formatWitnessValue(entry.bits);
+            const isChanged = changed.has(nid);
+            const style = isChanged ? 'color:var(--state-color);font-weight:700;' : 'color:var(--state-color);opacity:0.6;';
             html += `<a class="node-link" data-nid="${nid}">
-                <span style="color:var(--state-color);">${escHtml(name)}</span>
+                <span style="${style}">${escHtml(name)}</span>
                 <span style="color:var(--text-muted);font-family:var(--font-mono);font-size:10px;"> = ${escHtml(String(value))}</span>
             </a>`;
         }
         html += `</div>`;
     }
 
-    if (frame.inputs.size > 0) {
-        html += `<div class="detail-section">Inputs (${frame.inputs.size})</div><div class="detail-links">`;
-        for (const [nid, entry] of frame.inputs) {
+    if (cumInputs.size > 0) {
+        html += `<div class="detail-section">Inputs (${cumInputs.size})</div><div class="detail-links">`;
+        for (const [nid, entry] of cumInputs) {
             const node = parsedNodes.get(nid);
             const name = node ? (node.name || `#${nid}`) : `#${nid}`;
             const value = Array.isArray(entry) ? `[array]` : formatWitnessValue(entry.bits);
+            const isChanged = changed.has(nid);
+            const style = isChanged ? 'color:var(--input-color);font-weight:700;' : 'color:var(--input-color);opacity:0.6;';
             html += `<a class="node-link" data-nid="${nid}">
-                <span style="color:var(--input-color);">${escHtml(name)}</span>
+                <span style="${style}">${escHtml(name)}</span>
                 <span style="color:var(--text-muted);font-family:var(--font-mono);font-size:10px;"> = ${escHtml(String(value))}</span>
             </a>`;
         }
@@ -421,6 +450,83 @@ function updateWitnessDetailPanel(step) {
 
     detailPanel.innerHTML = html;
     detailPanel.querySelectorAll('.node-link').forEach(link => {
+        link.addEventListener('click', () => navigateToNode(parseInt(link.dataset.nid)));
+    });
+}
+
+// ============ Trace Panel ============
+
+function findPcNid(nodes) {
+    for (const [nid, node] of nodes) {
+        if (node.op === 'state' && node.name === 'pc') return nid;
+    }
+    return null;
+}
+
+function updateTracePanel() {
+    if (!player.loaded || !tracePanel || !traceContent) {
+        if (tracePanel) tracePanel.classList.add('hidden');
+        return;
+    }
+    tracePanel.classList.remove('hidden');
+
+    const step = player.currentStep;
+    const total = player.totalSteps;
+    const changed = player._changedNids || new Set();
+    let html = '';
+
+    html += `<div class="trace-row"><span class="label">Step:</span> <span class="trace-value">${step} / ${total - 1}</span></div>`;
+
+    const pcNid = findPcNid(parsedNodes);
+    if (pcNid !== null && player._cumStates) {
+        const entry = player._cumStates.get(pcNid);
+        if (entry && !Array.isArray(entry)) {
+            const dec = formatWitnessValue(entry.bits);
+            let hex = '';
+            const pureBits = entry.bits;
+            if (pureBits.length <= 52) {
+                hex = '0x' + parseInt(pureBits, 2).toString(16);
+            } else {
+                hex = '0x' + BigInt('0b' + pureBits).toString(16);
+            }
+            html += `<div class="trace-row"><span class="label">PC:</span> <span class="trace-value" style="color:var(--state-color);">${escHtml(hex)}</span></div>`;
+        }
+    }
+
+    if (player.witness.bad !== null) {
+        const badNid = badIndexToNid(parsedNodes, player.witness.bad);
+        const badNode = badNid ? parsedNodes.get(badNid) : null;
+        const badName = badNode ? (badNode.name || badNode.op) : `b${player.witness.bad}`;
+        const isViolated = step === total - 1;
+        const style = isViolated ? 'color:var(--bad-color);font-weight:600;' : '';
+        html += `<div class="trace-row"><span class="label">Bad:</span> <span style="${style}">${escHtml(badName)}${isViolated ? ' VIOLATED' : ''}</span></div>`;
+    }
+
+    html += `<div class="trace-section">Changed (${changed.size})</div>`;
+    if (changed.size > 0) {
+        const prevValues = player._prevValues || new Map();
+        for (const nid of changed) {
+            const node = parsedNodes.get(nid);
+            const name = node ? (node.name || `#${nid}`) : `#${nid}`;
+            const isState = player._cumStates && player._cumStates.has(nid);
+            const entry = isState ? player._cumStates.get(nid) : (player._cumInputs ? player._cumInputs.get(nid) : null);
+            const val = entry && !Array.isArray(entry) ? formatWitnessValue(entry.bits) : '...';
+            const color = isState ? 'var(--state-color)' : 'var(--input-color)';
+            const prevBits = prevValues.get(nid);
+            let valDisplay;
+            if (prevBits) {
+                valDisplay = `${escHtml(formatWitnessValue(prevBits))} → ${escHtml(val)}`;
+            } else {
+                valDisplay = `= ${escHtml(val)}`;
+            }
+            html += `<a class="node-link trace-change" data-nid="${nid}"><span style="color:${color};">${escHtml(name)}</span> <span class="trace-val">${valDisplay}</span></a>`;
+        }
+    } else {
+        html += `<span class="trace-none text-muted">(carried forward)</span>`;
+    }
+
+    traceContent.innerHTML = html;
+    traceContent.querySelectorAll('.node-link').forEach(link => {
         link.addEventListener('click', () => navigateToNode(parseInt(link.dataset.nid)));
     });
 }
@@ -474,6 +580,7 @@ function renderGraph() {
 
         if (player.loaded) {
             player.cy = cy;
+            player._lastRenderedStep = -1;
             player.goToStep(player.currentStep);
         }
         setStatus('Ready');
@@ -618,16 +725,17 @@ function showWitnessNodeDetail(nid) {
     if (node.name) html += `<div class="detail-row"><span class="label">Name:</span> ${escHtml(node.name)}</div>`;
     if (sortInfo) html += `<div class="detail-row"><span class="label">Sort:</span> ${sortInfo}</div>`;
 
-    // Witness value at current step
+    // Witness value at current step (cumulative — includes carried-forward values)
     if (player.loaded) {
-        const frame = player.witness.frames[player.currentStep];
-        if (frame) {
-            const entry = frame.states.get(nid) || frame.inputs.get(nid);
-            if (entry && !Array.isArray(entry)) {
-                const color = frame.states.has(nid) ? 'var(--state-color)' : 'var(--input-color)';
-                html += `<div class="detail-row"><span class="label">Value @${player.currentStep}:</span> <span style="color:${color};font-family:var(--font-mono);font-weight:600;">${escHtml(formatWitnessValue(entry.bits))}</span></div>`;
-                html += `<div class="detail-row"><span class="label">Binary:</span> <span style="font-family:var(--font-mono);font-size:10px;">${escHtml(entry.bits)}</span></div>`;
-            }
+        const entry = (player._cumStates && player._cumStates.get(nid)) ||
+                      (player._cumInputs && player._cumInputs.get(nid));
+        if (entry && !Array.isArray(entry)) {
+            const isState = player._cumStates && player._cumStates.has(nid);
+            const color = isState ? 'var(--state-color)' : 'var(--input-color)';
+            const isChanged = player._changedNids && player._changedNids.has(nid);
+            const suffix = isChanged ? '' : ' (carried forward)';
+            html += `<div class="detail-row"><span class="label">Value @${player.currentStep}:</span> <span style="color:${color};font-family:var(--font-mono);font-weight:600;">${escHtml(formatWitnessValue(entry.bits))}${suffix}</span></div>`;
+            html += `<div class="detail-row"><span class="label">Binary:</span> <span style="font-family:var(--font-mono);font-size:10px;">${escHtml(entry.bits)}</span></div>`;
         }
     }
 

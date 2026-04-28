@@ -20,6 +20,13 @@ class WitnessPlayer {
 
         // Track value overlays so we can remove them
         this._overlayEles = [];
+
+        // Cumulative state accessible by the app for trace panel
+        this._cumStates = new Map();
+        this._cumInputs = new Map();
+        this._changedNids = new Set();
+        this._prevValues = new Map(); // nid → previous bits string (for old→new diffs)
+        this._lastRenderedStep = -1;
     }
 
     /**
@@ -31,6 +38,7 @@ class WitnessPlayer {
         this.modelNodes = modelNodes;
         this.cy = cy;
         this.currentStep = 0;
+        this._lastRenderedStep = -1;
         this._clearOverlays();
     }
 
@@ -149,7 +157,7 @@ class WitnessPlayer {
     _clearOverlays() {
         if (!this.cy) return;
         // Remove witness classes
-        this.cy.elements().removeClass('witness-active witness-state witness-input witness-bad witness-inactive witness-value');
+        this.cy.elements().removeClass('witness-active witness-state witness-input witness-bad witness-inactive witness-value witness-changed');
 
         // Remove value labels
         this.cy.nodes().forEach(n => {
@@ -161,8 +169,49 @@ class WitnessPlayer {
     _renderStep() {
         if (!this.loaded || !this.cy) return;
 
-        const frame = this.witness.frames[this.currentStep];
-        if (!frame) return;
+        // Snapshot previous cumulative values for old→new diffs
+        const prevCum = new Map();
+        for (const [nid, entry] of this._cumStates) {
+            if (!Array.isArray(entry)) prevCum.set(nid, entry.bits);
+        }
+        for (const [nid, entry] of this._cumInputs) {
+            if (!Array.isArray(entry)) prevCum.set(nid, entry.bits);
+        }
+
+        // Build cumulative state: carry forward values from all frames up to current step
+        this._cumStates = new Map();
+        this._cumInputs = new Map();
+        for (let i = 0; i <= this.currentStep; i++) {
+            const f = this.witness.frames[i];
+            if (!f) continue;
+            for (const [nid, entry] of f.states) this._cumStates.set(nid, entry);
+            for (const [nid, entry] of f.inputs) this._cumInputs.set(nid, entry);
+        }
+
+        // Track which nids changed in this specific step, and store previous values
+        this._changedNids = new Set();
+        this._prevValues = new Map();
+        const currentFrame = this.witness.frames[this.currentStep];
+        if (currentFrame) {
+            for (const nid of currentFrame.states.keys()) {
+                this._changedNids.add(nid);
+                if (prevCum.has(nid)) this._prevValues.set(nid, prevCum.get(nid));
+            }
+            for (const nid of currentFrame.inputs.keys()) {
+                this._changedNids.add(nid);
+                if (prevCum.has(nid)) this._prevValues.set(nid, prevCum.get(nid));
+            }
+        }
+
+        // Optimization: skip expensive graph re-render if nothing changed
+        const atViolation = this.currentStep === this.totalSteps - 1;
+        const wasAtViolation = this._lastRenderedStep === this.totalSteps - 1;
+        if (this._changedNids.size === 0 && this._lastRenderedStep >= 0 &&
+            atViolation === wasAtViolation) {
+            this._lastRenderedStep = this.currentStep;
+            return;
+        }
+        this._lastRenderedStep = this.currentStep;
 
         // Clear previous overlays
         this._clearOverlays();
@@ -170,39 +219,38 @@ class WitnessPlayer {
         // Dim all nodes slightly
         this.cy.elements().addClass('witness-inactive');
 
-        // Collect all nids that have values in this frame
+        // Collect all nids that have cumulative values
         const activeNids = new Set();
 
-        // Highlight state nodes with values
-        for (const [nid, entry] of frame.states) {
+        // Highlight state nodes with cumulative values
+        for (const [nid, entry] of this._cumStates) {
             activeNids.add(nid);
             const cyNode = this.cy.getElementById(String(nid));
             if (cyNode.length) {
                 cyNode.removeClass('witness-inactive');
                 cyNode.addClass('witness-active witness-state');
+                if (this._changedNids.has(nid)) cyNode.addClass('witness-changed');
 
-                // Set the value as node data for label display
                 if (Array.isArray(entry)) {
                     cyNode.data('witnessValue', `[${entry.length} entries]`);
                 } else {
-                    const display = formatWitnessValue(entry.bits);
-                    cyNode.data('witnessValue', display);
+                    cyNode.data('witnessValue', formatWitnessValue(entry.bits));
                 }
                 cyNode.data('witnessLabel', this._makeLabel(cyNode, nid));
             }
         }
 
-        // Highlight input nodes with values
-        for (const [nid, entry] of frame.inputs) {
+        // Highlight input nodes with cumulative values
+        for (const [nid, entry] of this._cumInputs) {
             activeNids.add(nid);
             const cyNode = this.cy.getElementById(String(nid));
             if (cyNode.length) {
                 cyNode.removeClass('witness-inactive');
                 cyNode.addClass('witness-active witness-input');
+                if (this._changedNids.has(nid)) cyNode.addClass('witness-changed');
 
                 if (!Array.isArray(entry)) {
-                    const display = formatWitnessValue(entry.bits);
-                    cyNode.data('witnessValue', display);
+                    cyNode.data('witnessValue', formatWitnessValue(entry.bits));
                 }
                 cyNode.data('witnessLabel', this._makeLabel(cyNode, nid));
             }
@@ -217,7 +265,6 @@ class WitnessPlayer {
                     badNode.removeClass('witness-inactive');
                     badNode.addClass('witness-active witness-bad');
 
-                    // At the last step, the bad property is violated
                     if (this.currentStep === this.totalSteps - 1) {
                         badNode.data('witnessValue', 'VIOLATED');
                     }
@@ -235,11 +282,10 @@ class WitnessPlayer {
             }
         });
 
-        // Also un-dim nodes connected to active nodes (neighbors of state/input)
+        // Un-dim operand neighbors of active nodes
         for (const nid of activeNids) {
             const cyNode = this.cy.getElementById(String(nid));
             if (cyNode.length) {
-                // Un-dim immediate operands and dependents
                 const node = this.modelNodes.get(nid);
                 if (node) {
                     for (const opNid of node.operands) {

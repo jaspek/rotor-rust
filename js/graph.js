@@ -238,16 +238,22 @@ function buildClumpedElements(nodes, visibleNids, clumpCategories, subgraphRoot)
 
 /**
  * Check if a node is a descendant of any collapsed node.
+ * Walks UP through the dependent chain (consumers) transitively.
  */
 function isCollapsedDescendant(nodes, nid, collapsedNodes) {
-    const node = nodes.get(nid);
-    if (!node) return false;
-    // Walk up the dependent chain — if any ancestor is collapsed, hide this node
-    // More efficient: check if any of the node's operands (ancestors in data flow) are collapsed
-    // and the path from a collapsed node leads to this node
-    for (const opNid of node.operands) {
-        if (collapsedNodes.has(opNid)) return true;
-        // Don't recurse deeply — just check immediate parents
+    if (collapsedNodes.has(nid)) return false;
+    const visited = new Set();
+    const queue = [nid];
+    while (queue.length > 0) {
+        const cur = queue.pop();
+        if (visited.has(cur)) continue;
+        visited.add(cur);
+        const node = nodes.get(cur);
+        if (!node) continue;
+        for (const depNid of node.dependents) {
+            if (collapsedNodes.has(depNid)) return true;
+            if (!visited.has(depNid)) queue.push(depNid);
+        }
     }
     return false;
 }
@@ -459,6 +465,14 @@ function initGraph(container, elements) {
                     'label': 'data(witnessLabel)',
                     'font-size': '11px',
                     'font-weight': 'bold',
+                },
+            },
+            {
+                selector: '.witness-changed',
+                style: {
+                    'border-color': '#ffdd00',
+                    'border-width': 5,
+                    'z-index': 200,
                 },
             },
         ],
