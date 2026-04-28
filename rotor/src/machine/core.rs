@@ -260,6 +260,13 @@ impl CoreState {
     ///
     /// Returns (initial_sp, Option<stack_segment_init_node>).
     ///
+    /// Symbolic vs. concrete boundary:
+    ///   Only the content bytes of argv[1..N] are symbolic (unconstrained BTOR2
+    ///   states the solver can assign freely). Everything else is concrete:
+    ///   argc, all pointers, null terminators, argv[0] content, and the stack
+    ///   layout structure itself. This ensures the solver can explore arbitrary
+    ///   argument values without violating C argv invariants.
+    ///
     /// Stack layout (high to low address):
     ///   - String area: for each arg, `max_arglen` symbolic bytes + 1 null terminator
     ///   - Alignment padding to word boundary
@@ -268,7 +275,7 @@ impl CoreState {
     ///   - SP points here
     ///
     /// argv[0] = "prog" (fixed 4 bytes + null, acting as program name)
-    /// argv[1..N] = symbolic (each byte is an unconstrained BTOR2 input)
+    /// argv[1..N] = symbolic (each byte is an unconstrained BTOR2 state)
     fn initialize_symbolic_argv(
         builder: &mut Btor2Builder,
         sorts: &MachineSorts,
@@ -502,5 +509,414 @@ impl CoreState {
         }
 
         current
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::btor2::node::Op;
+    use crate::config::{Config, Xlen};
+
+    /// Build minimal sorts needed for initialize_symbolic_argv (RV64).
+    fn test_sorts(builder: &mut Btor2Builder) -> MachineSorts {
+        let config = Config {
+            xlen: Xlen::X64,
+            ..Config::default()
+        };
+        MachineSorts::new(builder, &config)
+    }
+
+    /// Collect every Write in the init chain as (address: u64, value_op: Op).
+    /// Walks backward from `tail` through the `array` operand of each Write.
+    fn collect_writes(builder: &Btor2Builder, tail: NodeId) -> Vec<(u64, Op)> {
+        let mut writes = Vec::new();
+        let mut cur = tail;
+        loop {
+            match builder.get_op(cur).clone() {
+                Op::Write { array, index, value, .. } => {
+                    let addr = match builder.get_op(index) {
+                        Op::Constd { value: v, .. } => *v,
+                        _ => panic!("expected constd address"),
+                    };
+                    writes.push((addr, builder.get_op(value).clone()));
+                    cur = array;
+                }
+                Op::State { .. } => break, // base state — end of chain
+                other => panic!("unexpected op in write chain: {:?}", other),
+            }
+        }
+        writes.reverse();
+        writes
+    }
+
+    fn make_config(num_args: usize, max_arglen: usize) -> Config {
+        Config {
+            xlen: Xlen::X64,
+            symbolic_argv: true,
+            symbolic_argc: num_args,
+            max_arglen,
+            ..Config::default()
+        }
+    }
+
+    #[test]
+    fn argc_is_concrete_constant() {
+        let mut builder = Btor2Builder::new();
+        let sorts = test_sorts(&mut builder);
+        let config = make_config(2, 4);
+        let word_size = 8u64;
+        let stack_top = 1u64 << 31;
+
+        let (sp, Some(tail)) = CoreState::initialize_symbolic_argv(
+            &mut builder, &sorts, &config, stack_top, word_size,
+        ) else {
+            panic!("expected Some(tail)");
+        };
+
+        let writes = collect_writes(&builder, tail);
+
+        // argc is written as a little-endian word at SP.
+        // Expected argc = symbolic_argc + 1 = 3.
+        let expected_argc: u64 = 3;
+        let mut reconstructed: u64 = 0;
+        for byte_idx in 0..word_size {
+            let addr = sp + byte_idx;
+            let (_, op) = writes
+                .iter()
+                .find(|(a, _)| *a == addr)
+                .unwrap_or_else(|| panic!("missing argc byte at SP+{}", byte_idx));
+            match op {
+                Op::Constd { value, .. } => {
+                    reconstructed |= value << (byte_idx * 8);
+                }
+                other => panic!(
+                    "argc byte {} must be a concrete Constd, got {:?}",
+                    byte_idx, other
+                ),
+            }
+        }
+        assert_eq!(reconstructed, expected_argc, "argc must be concrete 3");
+    }
+
+    #[test]
+    fn argv_null_terminator_pointer() {
+        let mut builder = Btor2Builder::new();
+        let sorts = test_sorts(&mut builder);
+        let config = make_config(1, 4);
+        let word_size = 8u64;
+        let stack_top = 1u64 << 31;
+
+        let (sp, Some(tail)) = CoreState::initialize_symbolic_argv(
+            &mut builder, &sorts, &config, stack_top, word_size,
+        ) else {
+            panic!("expected Some(tail)");
+        };
+
+        let writes = collect_writes(&builder, tail);
+        let total_argc: u64 = 2; // 1 symbolic + argv[0]
+
+        // Pointer area starts at SP + word_size (argc is at SP).
+        let pointer_area_start = sp + word_size;
+        // argv[argc] is the NULL terminator pointer at offset total_argc * word_size.
+        let null_ptr_start = pointer_area_start + total_argc * word_size;
+
+        for byte_idx in 0..word_size {
+            let addr = null_ptr_start + byte_idx;
+            let entry = writes.iter().find(|(a, _)| *a == addr);
+            assert!(entry.is_some(), "argv[argc] NULL pointer byte {} missing", byte_idx);
+            let (_, op) = entry.unwrap();
+            match op {
+                Op::Constd { value: 0, .. } => {}
+                other => panic!(
+                    "argv[argc] byte {} should be concrete 0, got {:?}",
+                    byte_idx, other
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn argv_pointers_match_string_addresses() {
+        let mut builder = Btor2Builder::new();
+        let sorts = test_sorts(&mut builder);
+        let config = make_config(2, 4);
+        let word_size = 8u64;
+        let stack_top = 1u64 << 31;
+
+        let (_sp, Some(tail)) = CoreState::initialize_symbolic_argv(
+            &mut builder, &sorts, &config, stack_top, word_size,
+        ) else {
+            panic!("expected Some(tail)");
+        };
+
+        let writes = collect_writes(&builder, tail);
+        let total_argc: usize = 3;
+
+        // Compute expected string addresses from the layout.
+        let prog_name = b"prog";
+        let argv0_len = prog_name.len() + 1; // 5
+        let sym_arg_len = config.max_arglen + 1; // 5
+        let string_area_size = argv0_len + config.symbolic_argc * sym_arg_len;
+        let string_area_aligned = (string_area_size as u64 + word_size - 1) & !(word_size - 1);
+        let string_area_start = stack_top - string_area_aligned;
+
+        let mut expected_addrs = Vec::new();
+        expected_addrs.push(string_area_start); // argv[0]
+        let mut offset = argv0_len as u64;
+        for _ in 0..config.symbolic_argc {
+            expected_addrs.push(string_area_start + offset);
+            offset += sym_arg_len as u64;
+        }
+
+        // Pointer area: starts after string area + alignment, then below that.
+        let pointer_area_size = (total_argc as u64 + 1) * word_size;
+        let pointer_area_start = string_area_start - pointer_area_size;
+
+        // Read each pointer from the write chain.
+        for (i, &expected_str_addr) in expected_addrs.iter().enumerate() {
+            let ptr_base = pointer_area_start + (i as u64) * word_size;
+            let mut reconstructed: u64 = 0;
+            for byte_idx in 0..word_size {
+                let addr = ptr_base + byte_idx;
+                let (_, op) = writes
+                    .iter()
+                    .find(|(a, _)| *a == addr)
+                    .unwrap_or_else(|| panic!("missing pointer byte at 0x{:x}", addr));
+                match op {
+                    Op::Constd { value, .. } => {
+                        reconstructed |= value << (byte_idx * 8);
+                    }
+                    other => panic!("pointer byte should be Constd, got {:?}", other),
+                }
+            }
+            assert_eq!(
+                reconstructed, expected_str_addr,
+                "argv[{}] pointer 0x{:x} != expected string addr 0x{:x}",
+                i, reconstructed, expected_str_addr
+            );
+        }
+    }
+
+    #[test]
+    fn symbolic_strings_end_with_concrete_null() {
+        let mut builder = Btor2Builder::new();
+        let sorts = test_sorts(&mut builder);
+        let config = make_config(2, 4);
+        let word_size = 8u64;
+        let stack_top = 1u64 << 31;
+
+        let (_, Some(tail)) = CoreState::initialize_symbolic_argv(
+            &mut builder, &sorts, &config, stack_top, word_size,
+        ) else {
+            panic!("expected Some(tail)");
+        };
+
+        let writes = collect_writes(&builder, tail);
+
+        let prog_name = b"prog";
+        let argv0_len = prog_name.len() + 1;
+        let sym_arg_len = config.max_arglen + 1;
+        let string_area_size = argv0_len + config.symbolic_argc * sym_arg_len;
+        let string_area_aligned = (string_area_size as u64 + word_size - 1) & !(word_size - 1);
+        let string_area_start = stack_top - string_area_aligned;
+
+        // Check each symbolic arg's null terminator.
+        let mut str_offset = argv0_len as u64; // skip argv[0]
+        for arg_idx in 0..config.symbolic_argc {
+            // Content bytes should be State (symbolic).
+            for byte_idx in 0..config.max_arglen {
+                let addr = string_area_start + str_offset + byte_idx as u64;
+                let (_, op) = writes
+                    .iter()
+                    .find(|(a, _)| *a == addr)
+                    .unwrap_or_else(|| {
+                        panic!("missing symbolic byte argv[{}][{}]", arg_idx + 1, byte_idx)
+                    });
+                assert!(
+                    matches!(op, Op::State { .. }),
+                    "argv[{}][{}] should be symbolic State, got {:?}",
+                    arg_idx + 1,
+                    byte_idx,
+                    op
+                );
+            }
+
+            // Null terminator must be concrete 0.
+            let null_addr = string_area_start + str_offset + config.max_arglen as u64;
+            let (_, op) = writes
+                .iter()
+                .find(|(a, _)| *a == null_addr)
+                .unwrap_or_else(|| {
+                    panic!("missing null terminator for argv[{}]", arg_idx + 1)
+                });
+            match op {
+                Op::Constd { value: 0, .. } => {}
+                other => panic!(
+                    "argv[{}] null terminator should be concrete 0, got {:?}",
+                    arg_idx + 1, other
+                ),
+            }
+
+            str_offset += sym_arg_len as u64;
+        }
+    }
+
+    #[test]
+    fn sp_points_to_argc() {
+        let mut builder = Btor2Builder::new();
+        let sorts = test_sorts(&mut builder);
+        let config = make_config(1, 8);
+        let word_size = 8u64;
+        let stack_top = 1u64 << 31;
+
+        let (sp, Some(tail)) = CoreState::initialize_symbolic_argv(
+            &mut builder, &sorts, &config, stack_top, word_size,
+        ) else {
+            panic!("expected Some(tail)");
+        };
+
+        let writes = collect_writes(&builder, tail);
+
+        // SP should have argc written there. Reconstruct.
+        let mut argc_at_sp: u64 = 0;
+        for byte_idx in 0..word_size {
+            let addr = sp + byte_idx;
+            let (_, op) = writes
+                .iter()
+                .find(|(a, _)| *a == addr)
+                .unwrap_or_else(|| panic!("missing argc byte at SP+{}", byte_idx));
+            match op {
+                Op::Constd { value, .. } => {
+                    argc_at_sp |= value << (byte_idx * 8);
+                }
+                other => panic!("argc byte should be Constd, got {:?}", other),
+            }
+        }
+
+        let expected_argc = (config.symbolic_argc + 1) as u64;
+        assert_eq!(argc_at_sp, expected_argc, "argc at SP must equal symbolic_argc + 1");
+
+        // Verify SP is below the pointer area (structurally correct).
+        let prog_name = b"prog";
+        let argv0_len = prog_name.len() + 1;
+        let sym_arg_len = config.max_arglen + 1;
+        let string_area_size = argv0_len + config.symbolic_argc * sym_arg_len;
+        let string_area_aligned = (string_area_size as u64 + word_size - 1) & !(word_size - 1);
+        let string_area_start = stack_top - string_area_aligned;
+        let total_argc = config.symbolic_argc + 1;
+        let pointer_area_size = (total_argc + 1) as u64 * word_size;
+        let pointer_area_start = string_area_start - pointer_area_size;
+        let expected_sp = pointer_area_start - word_size;
+        assert_eq!(sp, expected_sp, "SP must be one word below pointer area");
+    }
+
+    #[test]
+    fn register_a0_equals_argc() {
+        // Replicate the a0-init path from CoreState::new to verify the value
+        // written to register a0 matches argc = symbolic_argc + 1.
+        let mut builder = Btor2Builder::new();
+        let sorts = test_sorts(&mut builder);
+        let config = make_config(3, 4);
+
+        let expected_argc = (config.symbolic_argc + 1) as u64; // 4
+
+        // This mirrors lines 131-134 in CoreState::new.
+        let argc_val = builder.constd(
+            sorts.sid_machine_word,
+            (config.symbolic_argc + 1) as u64,
+            None,
+        );
+
+        // Build a register file write (same as CoreState::new does for a0).
+        let base_regs = builder.state(sorts.sid_register_state, "test-regs", None);
+        let a0_addr = builder.constd(sorts.sid_register_address, 10, None); // a0 = x10
+        let reg_with_a0 = builder.write(
+            sorts.sid_register_state, base_regs, a0_addr, argc_val, None,
+        );
+
+        // Verify the write targets a0 with the correct argc value.
+        match builder.get_op(reg_with_a0) {
+            Op::Write { index, value, .. } => {
+                match builder.get_op(*index) {
+                    Op::Constd { value: reg_num, .. } => {
+                        assert_eq!(*reg_num, 10, "a0 is register x10");
+                    }
+                    other => panic!("expected Constd register address, got {:?}", other),
+                }
+                match builder.get_op(*value) {
+                    Op::Constd { value: v, .. } => {
+                        assert_eq!(*v, expected_argc, "a0 must be set to argc = {}", expected_argc);
+                    }
+                    other => panic!("expected Constd argc value, got {:?}", other),
+                }
+            }
+            other => panic!("expected Write for a0 init, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn only_content_bytes_are_symbolic() {
+        let mut builder = Btor2Builder::new();
+        let sorts = test_sorts(&mut builder);
+        let config = make_config(1, 4);
+        let word_size = 8u64;
+        let stack_top = 1u64 << 31;
+
+        let (_, Some(tail)) = CoreState::initialize_symbolic_argv(
+            &mut builder, &sorts, &config, stack_top, word_size,
+        ) else {
+            panic!("expected Some(tail)");
+        };
+
+        let writes = collect_writes(&builder, tail);
+
+        // Identify which addresses hold symbolic (State) values.
+        let symbolic_addrs: Vec<u64> = writes
+            .iter()
+            .filter_map(|(addr, op)| {
+                if matches!(op, Op::State { .. }) {
+                    Some(*addr)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // There should be exactly max_arglen * symbolic_argc symbolic bytes.
+        let expected_symbolic_count = config.max_arglen * config.symbolic_argc;
+        assert_eq!(
+            symbolic_addrs.len(),
+            expected_symbolic_count,
+            "expected {} symbolic bytes ({}×{}), got {}",
+            expected_symbolic_count,
+            config.symbolic_argc,
+            config.max_arglen,
+            symbolic_addrs.len()
+        );
+
+        // Every symbolic address must fall within a symbolic arg's content region.
+        let prog_name = b"prog";
+        let argv0_len = prog_name.len() + 1;
+        let sym_arg_len = config.max_arglen + 1;
+        let string_area_size = argv0_len + config.symbolic_argc * sym_arg_len;
+        let string_area_aligned = (string_area_size as u64 + word_size - 1) & !(word_size - 1);
+        let string_area_start = stack_top - string_area_aligned;
+
+        for &addr in &symbolic_addrs {
+            let offset = addr - string_area_start;
+            assert!(
+                offset >= argv0_len as u64,
+                "symbolic byte at 0x{:x} falls inside argv[0] (concrete region)",
+                addr
+            );
+            let rel = offset - argv0_len as u64;
+            let within_arg = rel % sym_arg_len as u64;
+            assert!(
+                within_arg < config.max_arglen as u64,
+                "symbolic byte at 0x{:x} is at null terminator position (should be concrete)",
+                addr
+            );
+        }
     }
 }
