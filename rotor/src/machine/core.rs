@@ -534,7 +534,12 @@ mod tests {
         let mut cur = tail;
         loop {
             match builder.get_op(cur).clone() {
-                Op::Write { array, index, value, .. } => {
+                Op::Write {
+                    array,
+                    index,
+                    value,
+                    ..
+                } => {
                     let addr = match builder.get_op(index) {
                         Op::Constd { value: v, .. } => *v,
                         _ => panic!("expected constd address"),
@@ -569,7 +574,11 @@ mod tests {
         let stack_top = 1u64 << 31;
 
         let (sp, Some(tail)) = CoreState::initialize_symbolic_argv(
-            &mut builder, &sorts, &config, stack_top, word_size,
+            &mut builder,
+            &sorts,
+            &config,
+            stack_top,
+            word_size,
         ) else {
             panic!("expected Some(tail)");
         };
@@ -608,7 +617,11 @@ mod tests {
         let stack_top = 1u64 << 31;
 
         let (sp, Some(tail)) = CoreState::initialize_symbolic_argv(
-            &mut builder, &sorts, &config, stack_top, word_size,
+            &mut builder,
+            &sorts,
+            &config,
+            stack_top,
+            word_size,
         ) else {
             panic!("expected Some(tail)");
         };
@@ -624,7 +637,11 @@ mod tests {
         for byte_idx in 0..word_size {
             let addr = null_ptr_start + byte_idx;
             let entry = writes.iter().find(|(a, _)| *a == addr);
-            assert!(entry.is_some(), "argv[argc] NULL pointer byte {} missing", byte_idx);
+            assert!(
+                entry.is_some(),
+                "argv[argc] NULL pointer byte {} missing",
+                byte_idx
+            );
             let (_, op) = entry.unwrap();
             match op {
                 Op::Constd { value: 0, .. } => {}
@@ -645,7 +662,11 @@ mod tests {
         let stack_top = 1u64 << 31;
 
         let (_sp, Some(tail)) = CoreState::initialize_symbolic_argv(
-            &mut builder, &sorts, &config, stack_top, word_size,
+            &mut builder,
+            &sorts,
+            &config,
+            stack_top,
+            word_size,
         ) else {
             panic!("expected Some(tail)");
         };
@@ -707,7 +728,11 @@ mod tests {
         let stack_top = 1u64 << 31;
 
         let (_, Some(tail)) = CoreState::initialize_symbolic_argv(
-            &mut builder, &sorts, &config, stack_top, word_size,
+            &mut builder,
+            &sorts,
+            &config,
+            stack_top,
+            word_size,
         ) else {
             panic!("expected Some(tail)");
         };
@@ -727,12 +752,9 @@ mod tests {
             // Content bytes should be State (symbolic).
             for byte_idx in 0..config.max_arglen {
                 let addr = string_area_start + str_offset + byte_idx as u64;
-                let (_, op) = writes
-                    .iter()
-                    .find(|(a, _)| *a == addr)
-                    .unwrap_or_else(|| {
-                        panic!("missing symbolic byte argv[{}][{}]", arg_idx + 1, byte_idx)
-                    });
+                let (_, op) = writes.iter().find(|(a, _)| *a == addr).unwrap_or_else(|| {
+                    panic!("missing symbolic byte argv[{}][{}]", arg_idx + 1, byte_idx)
+                });
                 assert!(
                     matches!(op, Op::State { .. }),
                     "argv[{}][{}] should be symbolic State, got {:?}",
@@ -747,14 +769,13 @@ mod tests {
             let (_, op) = writes
                 .iter()
                 .find(|(a, _)| *a == null_addr)
-                .unwrap_or_else(|| {
-                    panic!("missing null terminator for argv[{}]", arg_idx + 1)
-                });
+                .unwrap_or_else(|| panic!("missing null terminator for argv[{}]", arg_idx + 1));
             match op {
                 Op::Constd { value: 0, .. } => {}
                 other => panic!(
                     "argv[{}] null terminator should be concrete 0, got {:?}",
-                    arg_idx + 1, other
+                    arg_idx + 1,
+                    other
                 ),
             }
 
@@ -771,7 +792,11 @@ mod tests {
         let stack_top = 1u64 << 31;
 
         let (sp, Some(tail)) = CoreState::initialize_symbolic_argv(
-            &mut builder, &sorts, &config, stack_top, word_size,
+            &mut builder,
+            &sorts,
+            &config,
+            stack_top,
+            word_size,
         ) else {
             panic!("expected Some(tail)");
         };
@@ -795,7 +820,10 @@ mod tests {
         }
 
         let expected_argc = (config.symbolic_argc + 1) as u64;
-        assert_eq!(argc_at_sp, expected_argc, "argc at SP must equal symbolic_argc + 1");
+        assert_eq!(
+            argc_at_sp, expected_argc,
+            "argc at SP must equal symbolic_argc + 1"
+        );
 
         // Verify SP is below the pointer area (structurally correct).
         let prog_name = b"prog";
@@ -831,9 +859,8 @@ mod tests {
         // Build a register file write (same as CoreState::new does for a0).
         let base_regs = builder.state(sorts.sid_register_state, "test-regs", None);
         let a0_addr = builder.constd(sorts.sid_register_address, 10, None); // a0 = x10
-        let reg_with_a0 = builder.write(
-            sorts.sid_register_state, base_regs, a0_addr, argc_val, None,
-        );
+        let reg_with_a0 =
+            builder.write(sorts.sid_register_state, base_regs, a0_addr, argc_val, None);
 
         // Verify the write targets a0 with the correct argc value.
         match builder.get_op(reg_with_a0) {
@@ -846,7 +873,11 @@ mod tests {
                 }
                 match builder.get_op(*value) {
                     Op::Constd { value: v, .. } => {
-                        assert_eq!(*v, expected_argc, "a0 must be set to argc = {}", expected_argc);
+                        assert_eq!(
+                            *v, expected_argc,
+                            "a0 must be set to argc = {}",
+                            expected_argc
+                        );
                     }
                     other => panic!("expected Constd argc value, got {:?}", other),
                 }
@@ -864,7 +895,11 @@ mod tests {
         let stack_top = 1u64 << 31;
 
         let (_, Some(tail)) = CoreState::initialize_symbolic_argv(
-            &mut builder, &sorts, &config, stack_top, word_size,
+            &mut builder,
+            &sorts,
+            &config,
+            stack_top,
+            word_size,
         ) else {
             panic!("expected Some(tail)");
         };

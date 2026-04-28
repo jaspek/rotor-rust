@@ -85,7 +85,11 @@ struct Cli {
     symbolic_argv: bool,
 
     /// Number of symbolic arguments (requires --symbolic-argv)
-    #[arg(long = "num-symbolic-args", alias = "symbolic-argc", default_value_t = 1)]
+    #[arg(
+        long = "num-symbolic-args",
+        alias = "symbolic-argc",
+        default_value_t = 1
+    )]
     num_symbolic_args: usize,
 
     /// Maximum length of each symbolic argument in bytes (requires --symbolic-argv)
@@ -103,9 +107,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     if std::env::args().any(|a| a == "--symbolic-argc") {
-        eprintln!(
-            "warning: --symbolic-argc is deprecated, use --num-symbolic-args instead"
-        );
+        eprintln!("warning: --symbolic-argc is deprecated, use --num-symbolic-args instead");
     }
 
     let config = Config {
