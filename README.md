@@ -33,7 +33,7 @@ We address the three obstacles in three parts:
 
 Code for each part lives in its own subdirectory: `rotor/`, `benchmarks/argv-tests/`, and `visualizer/`.
 
-Deliverables (slides, reports) are in the repository root: `Final_Report.pdf`, `Rotor_Overview.pdf`, `Rotor_Presentation.pdf`, `Symbolic_Arguments_Presentation.pdf`, `paper.tex`. The full course paper is also published as a PDF asset on the [GitHub releases page](../../releases).
+Deliverables (slides, reports, and the full course paper) are published on the [GitHub releases page](../../releases) so the repository stays free of large binary artefacts. Generator scripts for the slide decks live under `presentations/scripts/`.
 
 ---
 
