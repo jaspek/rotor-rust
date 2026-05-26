@@ -27,9 +27,9 @@ We address the three obstacles in three parts:
 
 | Part | Scope | Status |
 |------|-------|:------:|
-| 1 | Rust rewrite of the translator | **Complete** — generates BTOR2 models semantically equivalent to the C reference on 18 test programs. |
-| 2 | Symbolic argv support | **Complete** — 5 benchmark programs, each with a bug reachable *only* via argv, are discovered by btormc. |
-| 3 | Witness-trace visualizer | **In progress** — loads real btormc witness traces, supports depth-limited subgraphs and cone-of-influence views; per-step inspector is being polished. |
+| 1 | Rust rewrite of the translator | **Complete** — same 24 bad-state properties as the C reference; 18/18 standard benchmarks give the same btormc verdict; selfie self-model takes 47 ms in 20 MB (vs 106 s / 431 MB for the C version). |
+| 2 | Symbolic argv support | **Complete** — 5 benchmark programs, each with a bug reachable *only* via argv, are discovered by btormc within seconds. |
+| 3 | Witness-trace visualizer | **Complete** — browser tool with manifest-driven example picker (12 examples), full witness playback including array-valued symbolic inputs; available [live online](https://jaspek.github.io/rotor-rust/). |
 
 Code for each part lives in its own subdirectory: `rotor/`, `benchmarks/argv-tests/`, and `visualizer/`.
 
@@ -49,8 +49,8 @@ The sections below describe each part in more depth. Readers who only want the h
 - **Multi-core**: Configurable number of cores
 - **Segmented memory model**: Code (read-only), data, heap, and stack segments
 - **Kernel syscall modeling**: `exit`, `read`, `write`, `openat`, `brk`
-- **Safety properties**: Bad exit codes, division by zero, segmentation faults
-- **HashMap-based CSE**: O(1) common subexpression elimination (vs O(n) in the C original)
+- **Safety properties**: 24 bad-state properties matching the C reference — bad/good/any exit, division by zero, signed-division overflow, illegal-instruction (full + compressed + known-instructions), fetch (invalid-address, unaligned, seg-fault), load/store (invalid-address + seg-fault, plus compressed variants), stack-pointer (invalid-address + seg-fault), unknown-syscall-ID, syscall-arg seg-faults (brk/openat/read/write)
+- **HashMap-based CSE**: O(1) common subexpression elimination on every node (vs O(n) per node in the C original, which had to be turned off for the binary-loading section to stay tractable). On selfie's self-compiled binary (~43k RISC-U instructions, ~110k BTOR2 nodes), model generation takes 47 ms in 20 MB peak memory — vs 106 s in 431 MB for the C reference on the same input
 - **Arena allocation**: Cache-friendly node storage with stable indices
 
 #### Building
@@ -182,7 +182,7 @@ python -m http.server 8080
 
 - **Upload**: Click "Upload" to load a `.btor2` file from disk
 - **Paste**: Click "Paste" to paste BTOR2 text directly
-- **Example**: Click "Example" to load a bundled example model
+- **Example dropdown**: Pick one of 12 bundled examples (5 symbolic-argv tests with witnesses, 4 standard selfie benchmarks, 3 tiny exploration examples). Picking an entry loads both the model and its witness in one click.
 
 #### Witness Trace Playback
 
@@ -202,16 +202,15 @@ Then load the `.wit` file in the visualizer using "Load Trace" or click "Example
 
 **Playback controls**: Play/pause, step forward/back, jump to start/end, adjustable speed. Keyboard shortcuts: Arrow keys (step), Space (play/pause), Home/End (jump).
 
-#### Example Files
+#### Bundled examples
 
-| File | Description |
-|------|-------------|
-| `examples/simple-assignment-1-35.btor2` | Rotor output for a simple C program (~1142 nodes) |
-| `examples/counter-with-input.btor2` | Small counter model with state + input (19 nodes) |
-| `examples/counter-with-input.wit` | Real btormc witness trace (6 steps, counter overflow) |
-| `examples/simple-assignment-1-35.wit` | Synthetic witness trace (34 steps) |
-| `examples/division-by-zero-c.wit` | Real btormc witness trace (77 steps, C rotor division-by-zero) |
-| `examples/division-by-zero-rust.wit` | Real btormc witness trace (111 steps, Rust rotor seg-fault) |
+Listed in `visualizer/examples/manifest.json`. The dropdown groups them into three categories:
+
+| Category | Examples | Notes |
+|---|---|---|
+| **Symbolic argv (Rust Rotor)** | `argv_test1_crash_string` · `argv_test2_numeric_overflow` · `argv_test3_length_dependent` · `argv_test4_multi_arg` · `argv_test5_checksum` | All 5 have SAT witnesses — btormc finds the specific argv bytes that drive the program into a bad state. |
+| **Standard selfie benchmarks** | `bench_division_by_zero` · `bench_simple_if_else` · `bench_recursive_fibonacci` · `bench_memory_access_fail` | Models only (no symbolic input). Useful for inspecting the graph structure. |
+| **Tiny exploration** | `simple-assignment-1-35` · `counter-with-input` · `tiny-counter` | Small models for quickly trying the layout, witness playback, and view options. |
 
 ### Benchmarks
 
@@ -250,19 +249,27 @@ docker run --rm --entrypoint /bin/bash \
 
 ### Rust vs C Rotor: Model Comparison
 
-Both the Rust and C implementations of Rotor generate valid BTOR2 models that btormc can verify. The Rust rewrite produces more compact models with a different initialization encoding:
+Both implementations of Rotor generate valid BTOR2 models that btormc can verify. The Rust rewrite emits the **same 24 bad-state properties** as the C reference and produces semantically equivalent models — but generates them about three orders of magnitude faster and with twenty times less memory.
+
+#### Selfie self-model (selfie compiled into a RISC-U binary of itself, ~43k instructions)
+
+| Metric | C Rotor (reference) | Rust Rotor | Ratio |
+|---|---:|---:|---:|
+| Wall-clock model generation | 106 s | **47 ms** | ~2,250× faster |
+| Peak memory | 431 MB | **20 MB** | ~21× less |
+| Output BTOR2 size | 10.6 MB | **3.1 MB** | 3.4× smaller |
+| btormc validation (`catbtor` + `-kmax 0`) | — | **PASS** | — |
+
+#### Property-level equivalence
 
 | Aspect | C Rotor | Rust Rotor |
-|--------|---------|------------|
-| **Model size** (division-by-zero) | 4,163 lines | 1,176 lines (3.5x smaller) |
-| **Bad properties** | 24 (granular, per-instruction type) | 3 (abstract: exit code, div-by-zero, seg-fault) |
-| **States** | 14 (with phased init/zeroed/loaded) | 13 |
-| **Initialization** | Unfolded over time steps (`zeroed-*` → `loaded-*`) | Direct init from binary data |
-| **btormc counterexample** | Step 77 (kmax=100) | Step 111 (kmax=200) |
+|---|---|---|
+| **Bad-state properties** | 24 (by name) | **24** — same set, same names |
+| **18-benchmark btormc verdict at depth 35** | reference | **18 / 18 match** |
+| **Deduplication algorithm** | linear scan, O(N²) total (turned off for binary-loading section because of cost) | HashMap lookup, O(N) total (left on everywhere) |
+| **Initialization encoding** | Unfolded over time steps (`zeroed-*` → `loaded-*`) | Direct `init` statements from binary data |
 
-The C rotor uses **phased initialization** — separate `zeroed-code-segment` and `loaded-code-segment` states that unfold memory loading over clock cycles. The Rust rotor encodes initialization **directly** via `init` statements, producing a more compact model.
-
-Both produce semantically equivalent results: btormc finds counterexamples in both. The Rust model requires a higher `kmax` bound because its compact encoding results in more unrolling steps for the solver, but the generated models are ~3.5x smaller.
+The Rust output's smaller size comes from two places: leaving CSE turned on for the binary-loading section (which the C version had to switch off for performance) and the more compact `init`-based initialization encoding. Both rotors emit the same set of `bad` nodes by name — `bad-exit-code`, `division-by-zero`, `illegal-instruction`, `fetch-invalid-address`, `load-seg-fault`, `stack-pointer-invalid-address`, `unknown-syscall-ID`, etc. — and produce the same verdict on the 18 standard benchmarks at depth 35.
 
 ### Verification
 
