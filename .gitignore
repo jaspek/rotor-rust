@@ -1,26 +1,71 @@
+# --- Rust build artifacts ----------------------------------------------------
 /target
+**/target
+
+# --- Editor / OS junk --------------------------------------------------------
 *.swp
 *.swo
 .DS_Store
 .claude/
+~$*
+
+# --- Original C reference (large, distributed separately) --------------------
 rotor.c
 
-# Local-only PDFs (course paper is published as a GitHub release asset)
+# --- Course/research artefacts (kept local; published as releases) -----------
 Advanced_System_Engineering*.pdf
 Thesis_Direction_Proposal.pdf
 Thesis_Proposal_*.pdf
 thesis_proposal.*
 thesis_idea.pdf
 Deliverable.pdf
+ASE_Project_Proposal_Begic_Wassie.pdf
+Final_Report.pdf
+Rotor_Overview.pdf
+Rotor_Presentation.pdf
+Symbolic_Arguments_Presentation.*
+Meeting_*.pdf
+Meeting_*.pptx
+paper.tex
+paper.pdf
 
-# LaTeX build artifacts
+# --- LaTeX build artefacts ---------------------------------------------------
 *.aux
 *.log
 *.out
 *.toc
+*.bbl
+*.blg
+*.synctex.gz
+*.fdb_latexmk
+*.fls
 
-# Office files: keep PDFs tracked, keep .pptx sources local only
+# --- Office files: keep tracked PDFs we explicitly add; ignore drafts -------
 *.pptx
 
-# Office lock files
-~$*
+# --- One-off PDF/script generators at project root (intermediate work) ------
+# These are useful but not part of the deliverable codebase.
+/make_*.py
+/make_*.js
+/generate_*.py
+/*.pyc
+
+# --- Presentations folder: keep scripts, ignore generated decks/PDFs --------
+presentations/pdfs/
+presentations/decks/
+!presentations/scripts/
+!presentations/scripts/**
+!presentations/README.md
+
+# --- Benchmark generated outputs (regenerate via run_equivalence_check.ps1) -
+benchmarks/btor2-rust-rotor/
+benchmarks/btormc-witnesses/
+benchmarks/equivalence_results.csv
+benchmarks/output/
+benchmarks/output*
+
+# --- Shell-corruption artefacts from PowerShell ;C parsing ------------------
+**/*;C
+
+# --- Local-only experimental subproject (not part of the main deliverable) --
+agent-bitr/
