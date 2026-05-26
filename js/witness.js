@@ -166,6 +166,20 @@ function parseWitness(text, modelNodes) {
                 } else {
                     currentFrame.states.set(nid, [existing, entry]);
                 }
+            } else if (section === 'input' && idx < inputNids.length) {
+                // Same logic on the input side — without this, array-typed
+                // inputs (e.g. symbolic input buffers, memory inputs) were
+                // silently dropped from the witness display.
+                const nid = inputNids[idx];
+                if (!currentFrame.inputs.has(nid)) {
+                    currentFrame.inputs.set(nid, []);
+                }
+                const existing = currentFrame.inputs.get(nid);
+                if (Array.isArray(existing)) {
+                    existing.push(entry);
+                } else {
+                    currentFrame.inputs.set(nid, [existing, entry]);
+                }
             }
             continue;
         }
