@@ -1,0 +1,95 @@
+{
+  "examples": [
+    {
+      "id": "argv_test1_crash_string",
+      "label": "argv test1 — crash on string",
+      "category": "Symbolic argv (Rust Rotor)",
+      "description": "1 symbolic argument (8 bytes). The bounded model checker finds the byte that crashes the program.",
+      "model": "./examples/argv_test1_crash_string.btor2",
+      "witness": "./examples/argv_test1_crash_string.wit"
+    },
+    {
+      "id": "argv_test2_numeric_overflow",
+      "label": "argv test2 — numeric overflow",
+      "category": "Symbolic argv (Rust Rotor)",
+      "description": "1 symbolic argument (8 bytes). Triggers a numeric overflow in the program's arithmetic.",
+      "model": "./examples/argv_test2_numeric_overflow.btor2",
+      "witness": "./examples/argv_test2_numeric_overflow.wit"
+    },
+    {
+      "id": "argv_test3_length_dependent",
+      "label": "argv test3 — length-dependent bug",
+      "category": "Symbolic argv (Rust Rotor)",
+      "description": "1 symbolic argument (16 bytes). The bug depends on the argument's length / content.",
+      "model": "./examples/argv_test3_length_dependent.btor2",
+      "witness": "./examples/argv_test3_length_dependent.wit"
+    },
+    {
+      "id": "argv_test4_multi_arg",
+      "label": "argv test4 — two arguments must match",
+      "category": "Symbolic argv (Rust Rotor)",
+      "description": "Two symbolic arguments (8 bytes each). Bug fires only when argv[1][0]='X' AND argv[2][0]='Y' simultaneously. The model checker finds both.",
+      "model": "./examples/argv_test4_multi_arg.btor2",
+      "witness": "./examples/argv_test4_multi_arg.wit"
+    },
+    {
+      "id": "argv_test5_checksum",
+      "label": "argv test5 — checksum match",
+      "category": "Symbolic argv (Rust Rotor)",
+      "description": "1 symbolic argument (8 bytes). Bug fires when the bytes form a specific checksum.",
+      "model": "./examples/argv_test5_checksum.btor2",
+      "witness": "./examples/argv_test5_checksum.wit"
+    },
+    {
+      "id": "bench_division_by_zero",
+      "label": "selfie example — division by zero",
+      "category": "Standard selfie benchmarks (no symbolic argv)",
+      "description": "selfie's division-by-zero test. No symbolic input; the model checker verifies the program at depth 50.",
+      "model": "./examples/bench_division_by_zero.btor2"
+    },
+    {
+      "id": "bench_simple_if_else",
+      "label": "selfie example — simple if/else",
+      "category": "Standard selfie benchmarks (no symbolic argv)",
+      "description": "Plain conditional control flow. Useful for examining how the model encodes branches.",
+      "model": "./examples/bench_simple_if_else.btor2"
+    },
+    {
+      "id": "bench_recursive_fibonacci",
+      "label": "selfie example — recursive fibonacci",
+      "category": "Standard selfie benchmarks (no symbolic argv)",
+      "description": "Recursive fibonacci. Useful for seeing how stack frames look in the model.",
+      "model": "./examples/bench_recursive_fibonacci.btor2"
+    },
+    {
+      "id": "bench_memory_access_fail",
+      "label": "selfie example — memory access",
+      "category": "Standard selfie benchmarks (no symbolic argv)",
+      "description": "Memory-access scenario. Shows how loads and stores appear in the BTOR2 model.",
+      "model": "./examples/bench_memory_access_fail.btor2"
+    },
+    {
+      "id": "simple-assignment-1-35",
+      "label": "tiny — simple assignment + witness",
+      "category": "Tiny examples (for quick exploration)",
+      "description": "Smallest meaningful example. Good first thing to load to see the witness playback.",
+      "model": "./examples/simple-assignment-1-35.btor2",
+      "witness": "./examples/simple-assignment-1-35.wit"
+    },
+    {
+      "id": "counter-with-input",
+      "label": "tiny — counter driven by input",
+      "category": "Tiny examples (for quick exploration)",
+      "description": "Counter that advances each step based on a symbolic input bit.",
+      "model": "./examples/counter-with-input.btor2",
+      "witness": "./examples/counter-with-input.wit"
+    },
+    {
+      "id": "tiny-counter",
+      "label": "tiny — counter (no witness)",
+      "category": "Tiny examples (for quick exploration)",
+      "description": "Bare counter model without a witness. Use this to explore the graph structure.",
+      "model": "./examples/tiny-counter.btor2"
+    }
+  ]
+}
