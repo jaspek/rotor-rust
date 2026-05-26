@@ -267,6 +267,10 @@ function handlePaste() {
 }
 
 async function loadExample() {
+    // Kept for backwards compatibility — loads the first example from the manifest.
+    if (window.__exampleManifest && window.__exampleManifest.length > 0) {
+        return loadExampleById(window.__exampleManifest[0].id);
+    }
     setStatus('Loading Rotor example...');
     try {
         const modelResp = await fetch('./examples/simple-assignment-1-35.btor2');
@@ -282,6 +286,93 @@ async function loadExample() {
         loadWitness(witText, 'simple-assignment-1-35.wit');
     } catch (err) {
         setStatus('Example loaded (witness unavailable)');
+    }
+}
+
+// ============ Example Picker (manifest-driven dropdown) ============
+
+async function initExamplePicker() {
+    const picker = document.getElementById('example-picker');
+    const desc   = document.getElementById('example-description');
+    if (!picker) return;
+
+    let manifest;
+    try {
+        const resp = await fetch('./examples/manifest.json');
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        manifest = await resp.json();
+    } catch (err) {
+        // No manifest = no dropdown. Keep the old "Example" button working as fallback.
+        const wrap = document.getElementById('example-picker-wrap');
+        if (wrap) wrap.style.display = 'none';
+        return;
+    }
+
+    window.__exampleManifest = manifest.examples || [];
+
+    // Group by category, preserving manifest order within each group.
+    const groups = new Map();
+    for (const ex of window.__exampleManifest) {
+        const cat = ex.category || 'Other';
+        if (!groups.has(cat)) groups.set(cat, []);
+        groups.get(cat).push(ex);
+    }
+
+    // Populate the <select>
+    while (picker.options.length > 1) picker.remove(1);
+    for (const [cat, list] of groups) {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = cat;
+        for (const ex of list) {
+            const opt = document.createElement('option');
+            opt.value = ex.id;
+            opt.textContent = ex.label;
+            optgroup.appendChild(opt);
+        }
+        picker.appendChild(optgroup);
+    }
+
+    // On selection: show description, then load model (+ witness if present).
+    picker.addEventListener('change', () => {
+        const id = picker.value;
+        if (!id) { if (desc) desc.textContent = ''; return; }
+        const ex = window.__exampleManifest.find(e => e.id === id);
+        if (!ex) return;
+        if (desc) desc.textContent = ex.description || '';
+        loadExampleById(id);
+    });
+}
+
+async function loadExampleById(id) {
+    const ex = (window.__exampleManifest || []).find(e => e.id === id);
+    if (!ex) { setStatus('Unknown example: ' + id); return; }
+
+    setStatus(`Loading example: ${ex.label}...`);
+    try {
+        const r = await fetch(ex.model);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const text = await r.text();
+        loadBtor2(text, ex.id + '.btor2');
+    } catch (err) {
+        setStatus(`Failed to load model for ${ex.label}: ${err.message}`);
+        return;
+    }
+
+    if (ex.witness) {
+        try {
+            const r = await fetch(ex.witness);
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            const text = await r.text();
+            if (text.trim().length === 0) {
+                setStatus(`${ex.label} — model loaded; witness is empty (no bug at the chosen kmax)`);
+                return;
+            }
+            loadWitness(text, ex.id + '.wit');
+        } catch (err) {
+            setStatus(`${ex.label} — model loaded; witness failed: ${err.message}`);
+        }
+    } else {
+        setStatus(`${ex.label} — model loaded (no witness available)`);
     }
 }
 
@@ -983,4 +1074,5 @@ function escHtml(str) {
 
 // ============ Init ============
 
-setStatus('Ready \u2014 upload a BTOR2 file or load the example');
+setStatus('Ready \u2014 upload a BTOR2 file, pick an example from the dropdown, or paste one');
+initExamplePicker();
