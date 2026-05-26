@@ -303,20 +303,47 @@ function initGraph(container, elements) {
                     'background-color': 'data(bgColor)',
                     'border-color': 'data(borderColor)',
                     'border-width': 2.5,
-                    'width': 110,
-                    'height': 58,
-                    'padding': '12px',
+                    // Auto-size to label so long names like
+                    // "stack-pointer-invalid-address" or
+                    // "illegal-compressed-instruction" don't clip.
+                    'width': 'label',
+                    'height': 'label',
+                    'padding': '18px',
                     'shape': 'data(nodeShape)',
                     'text-wrap': 'wrap',
-                    'text-max-width': '180px',
+                    'text-max-width': '260px',
+                    'text-margin-y': 0,
                 },
             },
             {
+                // Octagons and pentagons have noticeably smaller interior
+                // area than their bounding box. Give them extra padding so
+                // the label sits comfortably inside the visible shape.
                 selector: 'node[category="bad"]',
                 style: {
                     'border-width': 3.5,
                     'font-weight': 'bold',
                     'font-size': '15px',
+                    'padding': '28px',
+                },
+            },
+            {
+                selector: 'node[category="memory"]',
+                style: {
+                    'padding': '24px',
+                },
+            },
+            {
+                selector: 'node[category="constraint"]',
+                style: {
+                    'padding': '24px',
+                },
+            },
+            {
+                selector: 'node[category="constant"]',
+                style: {
+                    // Diamonds eat even more interior than octagons.
+                    'padding': '26px',
                 },
             },
             {
@@ -330,6 +357,7 @@ function initGraph(container, elements) {
                 style: {
                     'font-size': '11px',
                     'opacity': 0.55,
+                    'padding': '12px',
                 },
             },
             {
@@ -346,7 +374,7 @@ function initGraph(container, elements) {
                     'font-size': '15px',
                     'border-style': 'dashed',
                     'border-width': 3.5,
-                    'padding': '20px',
+                    'padding': '24px',
                     'shape': 'roundrectangle',
                 },
             },

@@ -416,17 +416,40 @@ function updateWitnessDetailPanel(step) {
         </div>`;
     }
 
+    // Render a single witness entry (scalar or array) as readable HTML.
+    // For arrays we show up to ARRAY_PREVIEW_LIMIT [index]=value pairs, then
+    // "+N more" if truncated. This replaces the previous '[array]' placeholder
+    // so symbolic-execution witnesses (e.g. argv bytes, memory cells) are
+    // actually inspectable per step.
+    const ARRAY_PREVIEW_LIMIT = 6;
+    function renderEntry(entry) {
+        if (!Array.isArray(entry)) return escHtml(String(formatWitnessValue(entry.bits)));
+        if (entry.length === 0) return '<span style="opacity:0.5;">(empty array)</span>';
+        const parts = [];
+        const preview = entry.slice(0, ARRAY_PREVIEW_LIMIT);
+        for (const e of preview) {
+            const idx = (typeof e.arrayIndex === 'number') ? `[${e.arrayIndex}]` : '[?]';
+            const val = formatWitnessValue(e.bits);
+            parts.push(`${escHtml(idx)}=${escHtml(String(val))}`);
+        }
+        let s = parts.join(' ');
+        if (entry.length > ARRAY_PREVIEW_LIMIT) {
+            s += ` <span style="opacity:0.6;">+${entry.length - ARRAY_PREVIEW_LIMIT} more</span>`;
+        }
+        return s;
+    }
+
     if (cumStates.size > 0) {
         html += `<div class="detail-section">States (${cumStates.size})</div><div class="detail-links">`;
         for (const [nid, entry] of cumStates) {
             const node = parsedNodes.get(nid);
             const name = node ? (node.name || `#${nid}`) : `#${nid}`;
-            const value = Array.isArray(entry) ? `[${entry.length} entries]` : formatWitnessValue(entry.bits);
+            const value = renderEntry(entry);
             const isChanged = changed.has(nid);
             const style = isChanged ? 'color:var(--state-color);font-weight:700;' : 'color:var(--state-color);opacity:0.6;';
             html += `<a class="node-link" data-nid="${nid}">
                 <span style="${style}">${escHtml(name)}</span>
-                <span style="color:var(--text-muted);font-family:var(--font-mono);font-size:10px;"> = ${escHtml(String(value))}</span>
+                <span style="color:var(--text-muted);font-family:var(--font-mono);font-size:10px;"> = ${value}</span>
             </a>`;
         }
         html += `</div>`;
@@ -437,12 +460,12 @@ function updateWitnessDetailPanel(step) {
         for (const [nid, entry] of cumInputs) {
             const node = parsedNodes.get(nid);
             const name = node ? (node.name || `#${nid}`) : `#${nid}`;
-            const value = Array.isArray(entry) ? `[array]` : formatWitnessValue(entry.bits);
+            const value = renderEntry(entry);
             const isChanged = changed.has(nid);
             const style = isChanged ? 'color:var(--input-color);font-weight:700;' : 'color:var(--input-color);opacity:0.6;';
             html += `<a class="node-link" data-nid="${nid}">
                 <span style="${style}">${escHtml(name)}</span>
-                <span style="color:var(--text-muted);font-family:var(--font-mono);font-size:10px;"> = ${escHtml(String(value))}</span>
+                <span style="color:var(--text-muted);font-family:var(--font-mono);font-size:10px;"> = ${value}</span>
             </a>`;
         }
         html += `</div>`;
