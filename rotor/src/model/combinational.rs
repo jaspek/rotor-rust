@@ -19,7 +19,11 @@ pub struct CombinationalResult {
     pub rd_addr: NodeId,
     /// Next PC value (control flow)
     pub next_pc: NodeId,
-    /// Memory write address (if store)
+    /// Memory load address (rs1 + I-imm)
+    pub load_addr: NodeId,
+    /// Whether this instruction is a load
+    pub is_load: NodeId,
+    /// Memory write address (rs1 + S-imm)
     pub store_addr: NodeId,
     /// Memory write value (if store)
     pub store_value: NodeId,
@@ -27,7 +31,7 @@ pub struct CombinationalResult {
     pub store_width: NodeId,
     /// Whether this instruction writes to a register
     pub writes_rd: NodeId,
-    /// Whether this instruction writes to memory
+    /// Whether this instruction writes to memory (alias for is_store)
     pub writes_memory: NodeId,
     /// Whether this instruction is an ecall
     pub is_ecall: NodeId,
@@ -35,9 +39,25 @@ pub struct CombinationalResult {
     pub ir: NodeId,
     /// Is this a compressed instruction?
     pub is_compressed: NodeId,
-    /// Various condition flags for properties
+    /// Whether the decoder treats this instruction as Unknown
+    pub is_unknown_instruction: NodeId,
+    /// Whether the compressed decoder produced Unknown (only meaningful when
+    /// is_compressed is true; always false when the C extension is disabled).
+    pub is_unknown_compressed: NodeId,
+    /// Whether this is a compressed load (CLw/CLd/CLwsp/CLdsp).
+    pub is_compressed_load: NodeId,
+    /// Whether this is a compressed store (CSw/CSd/CSwsp/CSdsp).
+    pub is_compressed_store: NodeId,
+    /// Various per-property condition flags (see properties.rs)
     pub division_by_zero: NodeId,
+    pub signed_division_overflow: NodeId,
+    /// Generic load/store-validity flag — true iff a load OR store this step
+    /// targets an address outside the valid read/write segments.
     pub invalid_address: NodeId,
+    /// Granular load-side address invalidity (active only on loads).
+    pub load_invalid_address: NodeId,
+    /// Granular store-side address invalidity (active only on stores).
+    pub store_invalid_address: NodeId,
 }
 
 /// Generate the combinational logic for one core:
@@ -79,9 +99,16 @@ pub fn rotor_combinational(
     // ===== DECODE =====
     let full_instr_id = decode::decode_instruction(builder, sorts, consts, config, ir);
 
-    // Decode compressed if C extension enabled
+    // Decode compressed if C extension enabled. We keep c_instr_id around so
+    // properties.rs can flag illegal-compressed-instruction precisely.
+    let c_instr_id = if config.enable_c {
+        compressed::decode_compressed(builder, sorts, consts, c_ir)
+    } else {
+        // When C ext is off, treat the "compressed id" as Unknown — never used
+        // because the is_compressed_* flags below are gated on config.enable_c.
+        consts.nid_instr_id(InstrId::Unknown)
+    };
     let instruction_id = if config.enable_c {
-        let c_instr_id = compressed::decode_compressed(builder, sorts, consts, c_ir);
         builder.ite(
             sorts.sid_instruction_id,
             is_compressed,
@@ -417,15 +444,104 @@ pub fn rotor_combinational(
         acc
     };
     let not_load_valid = builder.not(bool_sid, load_valid, None);
-    let load_invalid = builder.and_node(bool_sid, is_load_instr, not_load_valid, None);
+    let load_invalid_address = builder.and_node(
+        bool_sid,
+        is_load_instr,
+        not_load_valid,
+        Some("load at invalid address?".to_string()),
+    );
     let not_store_valid = builder.not(bool_sid, store_valid, None);
-    let store_invalid = builder.and_node(bool_sid, is_store_instr, not_store_valid, None);
+    let store_invalid_address = builder.and_node(
+        bool_sid,
+        is_store_instr,
+        not_store_valid,
+        Some("store at invalid address?".to_string()),
+    );
     let invalid_address = builder.or_node(
         bool_sid,
-        load_invalid,
-        store_invalid,
+        load_invalid_address,
+        store_invalid_address,
         Some("invalid memory access?".to_string()),
     );
+
+    // Signed division overflow: rs1 == INT_MIN AND rs2 == -1 AND (DIV or REM)
+    let int_min_val: u64 = if config.xlen == Xlen::X64 {
+        0x8000_0000_0000_0000
+    } else {
+        0x8000_0000
+    };
+    let int_min = builder.constd(mw_sid, int_min_val, Some("INT_MIN".to_string()));
+    let minus_one_val: u64 = if config.xlen == Xlen::X64 { !0u64 } else { 0xFFFF_FFFF };
+    let minus_one = builder.constd(mw_sid, minus_one_val, Some("-1".to_string()));
+    let rs1_is_int_min = builder.eq_node(bool_sid, rs1_val, int_min, None);
+    let rs2_is_minus_one = builder.eq_node(bool_sid, rs2_val, minus_one, None);
+    let is_signed_div = {
+        let id_div = consts.nid_instr_id(InstrId::Div);
+        let id_rem = consts.nid_instr_id(InstrId::Rem);
+        let a = builder.eq_node(bool_sid, instruction_id, id_div, None);
+        let b = builder.eq_node(bool_sid, instruction_id, id_rem, None);
+        builder.or_node(bool_sid, a, b, Some("is signed div/rem?".to_string()))
+    };
+    let overflow_args = builder.and_node(bool_sid, rs1_is_int_min, rs2_is_minus_one, None);
+    let signed_division_overflow = builder.and_node(
+        bool_sid,
+        is_signed_div,
+        overflow_args,
+        Some("signed division overflow?".to_string()),
+    );
+
+    // Unknown / illegal instruction detection
+    let unknown_id = consts.nid_instr_id(InstrId::Unknown);
+    let is_unknown_instruction = builder.eq_node(
+        bool_sid,
+        instruction_id,
+        unknown_id,
+        Some("decoder returned Unknown".to_string()),
+    );
+
+    // Compressed-decoder-specific Unknown — only meaningful when C ext is on
+    // and the current instruction is in compressed form.
+    let is_unknown_compressed = if config.enable_c {
+        let c_unknown = builder.eq_node(bool_sid, c_instr_id, unknown_id, None);
+        builder.and_node(
+            bool_sid,
+            is_compressed,
+            c_unknown,
+            Some("compressed decoder returned Unknown".to_string()),
+        )
+    } else {
+        consts.nid_false
+    };
+
+    // Identify compressed loads and stores so properties.rs can emit per-instruction
+    // address-validity bad nodes for them. The C extension splits loads into
+    // {CLw, CLd, CLwsp, CLdsp} and stores into {CSw, CSd, CSwsp, CSdsp}.
+    let is_compressed_load = if config.enable_c {
+        let ids = [
+            InstrId::CLw, InstrId::CLd, InstrId::CLwsp, InstrId::CLdsp,
+        ];
+        let mut acc = consts.nid_false;
+        for id in ids {
+            let eq = builder.eq_node(bool_sid, instruction_id, consts.nid_instr_id(id), None);
+            acc = builder.or_node(bool_sid, acc, eq, None);
+        }
+        builder.and_node(bool_sid, is_compressed, acc, Some("compressed load?".to_string()))
+    } else {
+        consts.nid_false
+    };
+    let is_compressed_store = if config.enable_c {
+        let ids = [
+            InstrId::CSw, InstrId::CSd, InstrId::CSwsp, InstrId::CSdsp,
+        ];
+        let mut acc = consts.nid_false;
+        for id in ids {
+            let eq = builder.eq_node(bool_sid, instruction_id, consts.nid_instr_id(id), None);
+            acc = builder.or_node(bool_sid, acc, eq, None);
+        }
+        builder.and_node(bool_sid, is_compressed, acc, Some("compressed store?".to_string()))
+    } else {
+        consts.nid_false
+    };
 
     // ===== BUILD RD VALUE ITE CHAIN =====
     let mut rd_value = consts.nid_machine_word_0;
@@ -697,6 +813,8 @@ pub fn rotor_combinational(
         rd_value,
         rd_addr,
         next_pc,
+        load_addr,
+        is_load: is_load_instr,
         store_addr,
         store_value,
         store_width,
@@ -705,7 +823,14 @@ pub fn rotor_combinational(
         is_ecall,
         ir,
         is_compressed,
+        is_unknown_instruction,
+        is_unknown_compressed,
+        is_compressed_load,
+        is_compressed_store,
         division_by_zero,
+        signed_division_overflow,
         invalid_address,
+        load_invalid_address,
+        store_invalid_address,
     }
 }
