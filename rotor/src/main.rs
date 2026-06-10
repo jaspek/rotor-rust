@@ -107,6 +107,10 @@ struct Cli {
     /// Code synthesis mode (no binary needed)
     #[arg(long)]
     synthesis: bool,
+
+    /// Disable common-subexpression elimination (duplicate-check experiment)
+    #[arg(long)]
+    no_cse: bool,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -142,6 +146,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         target_exit_code: cli.exit_code,
         print_comments: cli.comments,
         propagate_constants: true,
+        enable_cse: !cli.no_cse,
     };
 
     let mut output: Box<dyn Write> = match &cli.output {

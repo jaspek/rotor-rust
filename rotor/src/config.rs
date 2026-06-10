@@ -54,6 +54,9 @@ pub struct Config {
     // output
     pub print_comments: bool,
     pub propagate_constants: bool,
+    /// Common-subexpression elimination (HashMap dedup). Disable to compare
+    /// with C rotor's reuse_lines = 0 (the professor's experiment).
+    pub enable_cse: bool,
 }
 
 impl Default for Config {
@@ -82,6 +85,7 @@ impl Default for Config {
             target_exit_code: 0,
             print_comments: true,
             propagate_constants: true,
+            enable_cse: true,
         }
     }
 }

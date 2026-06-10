@@ -30,6 +30,7 @@ pub fn model_rotor(
     );
 
     let mut builder = Btor2Builder::new();
+    builder.set_cse(config.enable_cse);
 
     // Phase 1: Initialize sorts and constants
     log::info!("Initializing sorts and constants...");
