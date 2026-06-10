@@ -27,7 +27,7 @@ We address the three obstacles in three parts:
 
 | Part | Scope | Status |
 |------|-------|:------:|
-| 1 | Rust rewrite of the translator | **Complete — verified equivalent on all 18 standard benchmarks (18/18)**: same 24 bad-state properties as the C reference by name, index, and ported predicate; btormc fires the **same property at the same least bound k** from both rotors' models on every benchmark at kmax=1500. Selfie self-model generates in 47 ms / 20 MB (vs 106 s / 431 MB for C). Evidence: `P2_RESULTS.md`, `benchmarks/deep_equivalence_results.csv`. |
+| 1 | Rust rewrite of the translator | **Complete — verified equivalent on all 18 standard benchmarks (18/18)**: same 24 bad-state properties as the C reference by name, index, and ported predicate; btormc fires the **same property at the same least bound k** from both rotors' models on every benchmark at kmax=1500. Selfie self-model generates in ~0.1 s / 20 MB (vs 139 s / 428 MB for C, binary-only, re-measured). Evidence: `P2_RESULTS.md`, `benchmarks/deep_equivalence_results.csv`. |
 | 2 | Symbolic argv support | **Complete** — 5 benchmark programs, each with a bug reachable *only* via argv, are discovered by btormc within seconds. |
 | 3 | Witness-trace visualizer | **Complete** — redesigned browser tool: example picker (12 examples), witness playback with timeline scrubber, drag & drop loading, keyboard shortcuts, full symbolic-input display; [live online](https://jaspek.github.io/rotor-rust/). |
 
@@ -286,12 +286,38 @@ Both implementations of Rotor generate valid BTOR2 models that btormc can verify
 
 #### Selfie self-model (selfie compiled into a RISC-U binary of itself, ~43k instructions)
 
+Re-measured 2026-06-10, strictly apples-to-apples: both rotors consume the
+**pre-compiled selfie.m binary** (C: `rotor -m64 -l selfie.m - 0` under
+`/usr/bin/time -v` in the container; Rust: 3 runs, wall clock + polled peak
+working set):
+
 | Metric | C Rotor (reference) | Rust Rotor | Ratio |
 |---|---:|---:|---:|
-| Wall-clock model generation | 106 s | **47 ms** | ~2,250× faster |
-| Peak memory | 431 MB | **20 MB** | ~21× less |
+| Wall-clock model generation | 139 s | **0.06–0.14 s** | ~1,000–2,000× faster |
+| Peak memory | 428 MB | **20 MB** | ~21× less |
+| Internal formula lines created | 3,165,611 | ~111k (duplicates never created) | 28× |
 | Output BTOR2 size | 10.6 MB | **3.1 MB** | 3.4× smaller |
-| btormc validation (`catbtor` + `-kmax 0`) | — | **PASS** | — |
+| btormc validation (`catbtor` + `-kmax 0`) | PASS | **PASS** | — |
+
+**Why is it so much faster?** Both rotors deduplicate identical formula
+lines. C checks each new line by walking a linear list of all previous
+lines — O(N) per line, O(N²) overall; its own log shows **3,165,611 lines
+generated**, so that is billions of comparisons. The Rust rotor performs
+the *same syntactic check* with a hash map: one constant-time lookup per
+node. Same work, different data structure — confirmed by the `--no-cse`
+experiment above (dedup off changes size, never meaning).
+
+**Why so much less memory?** C *creates* all 3.17 M line records in memory
+and deduplicates afterwards — at ~135 bytes per record that is ≈428 MB.
+The Rust rotor's hash lookup happens *before* allocation, so duplicates
+never exist: only the ~111k unique nodes are ever stored (compact arena +
+hash index ≈ 20 MB). It is create-then-filter vs filter-then-create.
+
+**What is the btormc validation row?** Two smoke tests that the output is
+a *legal, usable* model: `catbtor` (the official BTOR2 checker) parses and
+sort-checks every line, and `btormc -kmax 0` actually loads the model and
+evaluates the initial state. This proves well-formedness only — the
+*behavioural* proof is the 18/18 same-property-same-k table below.
 
 #### Property-level equivalence (deep check: same property, same least-k)
 
@@ -307,10 +333,20 @@ table and methodology in `P2_RESULTS.md`). Highlights:
 | invalid-memory-access-fail-2-35 | store-invalid-address @ k=79 | store-invalid-address @ k=79 | YES |
 | memory-access-fail-1-35 | load-seg-fault @ k=66 | load-seg-fault @ k=66 | YES |
 | nested-if-else-1-35 | bad-exit-code @ k=100 | bad-exit-code @ k=100 | YES |
+| nested-if-else-reverse-1-35 | bad-exit-code @ k=103 | bad-exit-code @ k=103 | YES |
+| nested-recursion-fail-1-35 | UNSAT @ kmax=1500 | UNSAT @ kmax=1500 | YES |
 | recursive-ackermann-1-35 | bad-exit-code @ k=152 | bad-exit-code @ k=152 | YES |
-| three-level-nested-loop-fail | bad-exit-code @ k=103 | bad-exit-code @ k=103 | YES |
-| return-from-loop / nested-recursion | UNSAT @ kmax=1500 | UNSAT @ kmax=1500 | YES |
-| ...and 11 more | | all matching | YES |
+| recursive-factorial-fail-1-35 | bad-exit-code @ k=119 | bad-exit-code @ k=119 | YES |
+| recursive-fibonacci-1-10 | bad-exit-code @ k=118 | bad-exit-code @ k=118 | YES |
+| return-from-loop-1-35 | UNSAT @ kmax=1500 | UNSAT @ kmax=1500 | YES |
+| simple-assignment-1-35 | bad-exit-code @ k=96 | bad-exit-code @ k=96 | YES |
+| simple-decreasing-loop-1-35 | bad-exit-code @ k=99 | bad-exit-code @ k=99 | YES |
+| simple-if-else-1-35 | bad-exit-code @ k=108 | bad-exit-code @ k=108 | YES |
+| simple-if-else-reverse-1-35 | bad-exit-code @ k=108 | bad-exit-code @ k=108 | YES |
+| simple-if-without-else-1-35 | bad-exit-code @ k=101 | bad-exit-code @ k=101 | YES |
+| simple-increasing-loop-1-35 | bad-exit-code @ k=93 | bad-exit-code @ k=93 | YES |
+| three-level-nested-loop-fail-1-35 | bad-exit-code @ k=103 | bad-exit-code @ k=103 | YES |
+| two-level-nested-loop-1-35 | bad-exit-code @ k=99 | bad-exit-code @ k=99 | YES |
 
 This required making the machine model faithful to the C reference:
 zero-initialized segments and registers, page-aligned heap, full 4 GB stack
