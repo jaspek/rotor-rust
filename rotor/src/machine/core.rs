@@ -200,11 +200,20 @@ impl CoreState {
             Some("init data segment from binary".to_string()),
         );
 
-        // --- Heap segment (no init — symbolic) ---
+        // --- Heap segment (zero-initialized, matching C rotor) ---
+        // The heap starts all-zero; the program and the read syscall evolve it
+        // via next-state logic. Without this init, untouched heap cells would be
+        // solver-chosen garbage.
         let heap_segment_state = builder.state(
             sorts.sid_heap_state,
             &format!("{}heap-segment", prefix),
-            Some("heap segment".to_string()),
+            Some("heap segment (zeroed)".to_string()),
+        );
+        builder.init(
+            sorts.sid_heap_state,
+            heap_segment_state,
+            consts.nid_byte_0,
+            Some("zeroing heap segment".to_string()),
         );
 
         // --- Stack segment ---
@@ -214,11 +223,24 @@ impl CoreState {
             Some("stack segment".to_string()),
         );
         if let Some(stack_val) = stack_init_val {
+            // Symbolic argv: stack initialized with the argv layout (already
+            // built on a zeroed base inside initialize_symbolic_argv).
             let _stack_init = builder.init(
                 sorts.sid_stack_state,
                 stack_segment_state,
                 stack_val,
                 Some("init stack segment with argv".to_string()),
+            );
+        } else {
+            // Default mode: zero-initialize the stack. (Concrete argv stack
+            // layout — P0.3 — is future work; for now the stack starts zeroed
+            // rather than unconstrained, which removes false counterexamples
+            // from reading uninitialized stack memory.)
+            builder.init(
+                sorts.sid_stack_state,
+                stack_segment_state,
+                consts.nid_byte_0,
+                Some("zeroing stack segment".to_string()),
             );
         }
 
@@ -308,11 +330,19 @@ impl CoreState {
         let pointer_area_start = string_area_start - pointer_area_size;
         let sp = pointer_area_start - word_size; // argc lives at SP
 
-        // Start building the stack array (use state, not input — BTOR2 forbids inputs in init)
+        // Start building the stack array (use state, not input — BTOR2 forbids inputs in init).
+        // Zero the base so cells outside the argv layout are provably zero, not garbage.
+        let stack_zero = builder.constd(sorts.sid_byte, 0, Some("byte 0".to_string()));
         let stack_seg = builder.state(
             sorts.sid_stack_state,
             "initial-stack-base",
-            Some("base stack segment for argv initialization".to_string()),
+            Some("base stack segment for argv initialization (zeroed)".to_string()),
+        );
+        builder.init(
+            sorts.sid_stack_state,
+            stack_seg,
+            stack_zero,
+            Some("zeroing stack base".to_string()),
         );
         let mut current = stack_seg;
 
@@ -447,10 +477,21 @@ impl CoreState {
     ) -> NodeId {
         // Start with an anonymous state as base for the code segment init chain.
         // (BTOR2 does not allow 'input' in init expressions)
+        // Zero-initialize the base so every cell not written below is provably
+        // zero (matching C rotor's "zeroed code segment"). Without this init the
+        // base is an unconstrained array and untouched cells become solver-chosen
+        // garbage, which can produce false counterexamples.
+        let code_zero = builder.constd(sorts.sid_code_word, 0, Some("code word 0".to_string()));
         let code_seg = builder.state(
             sorts.sid_code_state,
             "initial-code-base",
-            Some("base code segment for initialization".to_string()),
+            Some("base code segment for initialization (zeroed)".to_string()),
+        );
+        builder.init(
+            sorts.sid_code_state,
+            code_seg,
+            code_zero,
+            Some("zeroing code segment".to_string()),
         );
 
         let mut current = code_seg;
@@ -489,18 +530,28 @@ impl CoreState {
     ) -> NodeId {
         // Start with an anonymous state as base for the data segment init chain.
         // (BTOR2 does not allow 'input' in init expressions)
+        // Zero-initialize the base (matching C rotor's "zeroed data segment").
+        // With the base provably zero, skipping zero bytes below is correct.
+        let byte_zero = builder.constd(sorts.sid_byte, 0, Some("byte 0".to_string()));
         let data_seg = builder.state(
             sorts.sid_data_state,
             "initial-data-base",
-            Some("base data segment for initialization".to_string()),
+            Some("base data segment for initialization (zeroed)".to_string()),
+        );
+        builder.init(
+            sorts.sid_data_state,
+            data_seg,
+            byte_zero,
+            Some("zeroing data segment".to_string()),
         );
 
         let mut current = data_seg;
 
-        // Write each byte from the data section
+        // Write each non-zero byte from the data section (zero bytes already
+        // covered by the zeroed base above).
         for (i, &byte_val) in binary.data.iter().enumerate() {
             if byte_val == 0 {
-                continue; // Skip zero bytes (array default is unspecified, but typically models handle this)
+                continue;
             }
             let addr_val = binary.data_start + i as u64;
             let addr = builder.constd(sorts.sid_data_address, addr_val, None);
