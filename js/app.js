@@ -688,6 +688,7 @@ function renderGraph() {
 
     setTimeout(() => {
         runLayout(cy, layoutMode);
+        cy.resize();
         cy.fit(null, 30);
         if (layoutMode !== 'cose') cy.nodes().ungrabify();
         setupGraphInteraction();
