@@ -27,7 +27,7 @@ We address the three obstacles in three parts:
 
 | Part | Scope | Status |
 |------|-------|:------:|
-| 1 | Rust rewrite of the translator | **Complete, semantic equivalence being verified benchmark-by-benchmark** — same 24 bad-state properties as the C reference *by name, index, and ported predicate*; on every deep-checked benchmark so far btormc fires the **same property at the same least bound k** from both rotors' models (e.g. division-by-zero: `b7 @ k=76` in both). Selfie self-model generates in 47 ms / 20 MB (vs 106 s / 431 MB for C). See `EQUIVALENCE_PLAN.md` and `P2_RESULTS.md`. |
+| 1 | Rust rewrite of the translator | **Complete — verified equivalent on all 18 standard benchmarks (18/18)**: same 24 bad-state properties as the C reference by name, index, and ported predicate; btormc fires the **same property at the same least bound k** from both rotors' models on every benchmark at kmax=1500. Selfie self-model generates in 47 ms / 20 MB (vs 106 s / 431 MB for C). Evidence: `P2_RESULTS.md`, `benchmarks/deep_equivalence_results.csv`. |
 | 2 | Symbolic argv support | **Complete** — 5 benchmark programs, each with a bug reachable *only* via argv, are discovered by btormc within seconds. |
 | 3 | Witness-trace visualizer | **Complete** — redesigned browser tool: example picker (12 examples), witness playback with timeline scrubber, drag & drop loading, keyboard shortcuts, full symbolic-input display; [live online](https://jaspek.github.io/rotor-rust/). |
 
@@ -40,9 +40,10 @@ by piece — zero-initialized memory and registers, page-aligned heap and full
 read-syscall semantics (one input byte per transition with the PC stalled),
 file-descriptor state, and all 24 safety properties re-ported from `rotor.c`
 in the C output's exact emission order. Each step was verified with catbtor +
-btormc before the next. The deep harness (`benchmarks/run_deep_equivalence.ps1`)
-compares the fired property and least-k on both rotors at kmax=1500; results
-land in `benchmarks/deep_equivalence_results.csv`.
+btormc before the next. The deep harness (`benchmarks/run_deep_equivalence.ps1`,
+parallelized across cores by `benchmarks/parallel_runner.sh`) compares the
+fired property and least-k on both rotors at kmax=1500. **Final result:
+18/18 benchmarks equivalent** (`benchmarks/deep_equivalence_results.csv`).
 
 Deliverables (slides, reports, and the full course paper) are published on the [GitHub releases page](../../releases) so the repository stays free of large binary artefacts. Generator scripts for the slide decks live under `presentations/scripts/`.
 

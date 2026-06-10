@@ -9,7 +9,18 @@ Status legend: ✅ done+verified · 🔧 in progress · ❌ not started
 
 ---
 
-## Proven non-equivalence (current state)
+# 🏁 CAMPAIGN COMPLETE (2026-06-10): 18/18 BENCHMARKS EQUIVALENT
+
+Every step below is done and verified. Final result: on all 18 standard
+benchmarks, btormc reports the same bad-state property at the same least
+bound k from both rotors' models at kmax=1500 (16 SAT rows, 2 agreed-UNSAT
+rows). Full table and methodology: `P2_RESULTS.md` /
+`benchmarks/deep_equivalence_results.csv`. The section below documents the
+historical starting point.
+
+---
+
+## Proven non-equivalence (historical starting point, 2026-06-09)
 
 On `division-by-zero-3-35` at kmax=200:
 
@@ -201,28 +212,34 @@ Needs wiring into combinational (heap data flow + control flow) and sequential.
 
 ---
 
-## P0.4 — Target exit-code parameter ❌
+## P0.4 — Target exit-code parameter ✅ DONE (shipped with P1, commit 594c50e)
 
 C: bad-exit = `active_exit AND a0 == target_exit_code`; good-exit =
 `a0 != target`. Target from CLI (`rotor … - N`). Ours hardcodes `a0 != 0`.
 Add a `--exit-code N` config field; default target 0 (matching `- 0`).
 
-## P0.5 — file-descriptor kernel state ❌
+## P0.5 — file-descriptor kernel state ✅ DONE (shipped with P0.2, commit 693f9a4)
 
 C: state `file-descriptor`, init 0, openat returns then increments it.
 Add to `KernelState`.
 
 ---
 
-## P2 — Deep equivalence harness + CSE-off experiment ❌
+## P2 — Deep equivalence harness + CSE-off experiment ✅ DONE (commit 7a1b3fd)
 
-1. For each of the 18 benchmarks, run btormc on **both** rotors at a kmax
-   large enough (≥1500 per paper) and record (fired property, least-k).
-   Equivalent ⇔ identical (property, least-k) for all 18.
-2. Professor's experiment: add `--no-cse` flag (builder already has
-   `set_cse`; just expose it), regenerate, and compare model size + solver
-   behavior with C rotor's reuse disabled. Confirms the speed story is the
-   data-structure change and nothing semantic.
+1. ✅ All 18 benchmarks, btormc kmax=1500 on both rotors:
+   **18/18 same (property, least-k)** — 16 SAT rows (k = 66..152), 2
+   agreed-UNSAT rows. Run partly in parallel across cores
+   (`benchmarks/parallel_runner.sh`). One apparent divergence was a
+   harness artifact (crashed container recorded as UNSAT) — re-run
+   alone it matched exactly; runner fixed to distinguish ERROR from UNSAT.
+2. ✅ CSE-off experiment: C rotor with `reuse_lines = 0` CRASHES
+   (`ite then sort mismatch`, exit 14) — its generator depends on reuse
+   for node identity. Rust `--no-cse` works: models grow ~1.43x and stay
+   catbtor-valid with identical btormc verdicts. The speed story is the
+   data structure, nothing semantic. Bonus: measured why file sizes differ
+   (comments 49.5% of C's file, binary-string constants, 7- vs 5-digit
+   nids) — see README.
 
 ---
 
