@@ -96,16 +96,33 @@ impl CoreState {
         let (initial_sp, stack_init_val) = if config.symbolic_argv && config.symbolic_argc > 0 {
             Self::initialize_symbolic_argv(builder, sorts, config, vaddr_top, word_size)
         } else {
-            let sp = vaddr_top - word_size;
-            (sp, None)
+            // Default mode: concrete argv image on the stack, exactly like the
+            // C reference boot loader (argc=1, argv[0]=program name).
+            let (sp, stack_val) = Self::initialize_concrete_argv(
+                builder,
+                sorts,
+                vaddr_top,
+                word_size,
+                &binary.name,
+            );
+            (sp, Some(stack_val))
         };
 
-        // --- Register file init value (base state + writes for SP, a0, x0) ---
-        // Use a base state as the write target (like C rotor's "zeroed register file")
+        // --- Register file init value ---
+        // C reference: a ZEROED register file with only SP written
+        // ("zeroing register file" + "write initial register value" for sp).
+        // The zeroed base means every other register, including x0, is
+        // provably zero — no explicit x0 write needed.
         let base_regs = builder.state(
             sorts.sid_register_state,
             &format!("{}base-register-file", prefix),
-            Some("base register file for initialization".to_string()),
+            Some("base register file for initialization (zeroed)".to_string()),
+        );
+        builder.init(
+            sorts.sid_register_state,
+            base_regs,
+            consts.nid_machine_word_0,
+            Some("zeroing register file".to_string()),
         );
 
         let sp_val = builder.constd(
@@ -122,8 +139,9 @@ impl CoreState {
             Some("set initial SP".to_string()),
         );
 
-        // Set a0 = argc when symbolic argv is enabled
-        let reg_after_argc = if config.symbolic_argv && config.symbolic_argc > 0 {
+        // Set a0 = argc only in symbolic-argv mode (our extension). The C
+        // reference does NOT initialize a0 — programs read argc from the stack.
+        let reg_init_val = if config.symbolic_argv && config.symbolic_argc > 0 {
             let argc_val = builder.constd(
                 sorts.sid_machine_word,
                 (config.symbolic_argc + 1) as u64,
@@ -140,17 +158,6 @@ impl CoreState {
         } else {
             reg_with_sp
         };
-
-        // Set x0 = 0 explicitly
-        let zero_val = consts.nid_machine_word_0;
-        let x0_addr = consts.nid_register(crate::riscv::isa::regs::ZR);
-        let reg_init_val = builder.write(
-            sorts.sid_register_state,
-            reg_after_argc,
-            x0_addr,
-            zero_val,
-            Some("x0 = 0".to_string()),
-        );
 
         // ================================================================
         // Phase 2: Create real states and init them.
@@ -275,6 +282,100 @@ impl CoreState {
             kernel,
             core_id,
         }
+    }
+
+    /// Initialize the stack with a CONCRETE argv image, matching the C
+    /// reference boot loader (selfie convention, verified against the
+    /// reference model's write chain):
+    ///
+    ///   stack_end                      <- top of virtual address space
+    ///     [program-name string]        <- word-aligned, NUL-terminated
+    ///   string_start
+    ///     [0]                          <- env NULL terminator
+    ///     [0]                          <- argv NULL terminator
+    ///     [argv[0] ptr = string_start]
+    ///     [argc = 1]                   <- SP points here
+    ///
+    /// All writes go onto a zeroed stack base, so zero bytes are skipped.
+    /// Returns (initial_sp, stack_init_value).
+    fn initialize_concrete_argv(
+        builder: &mut Btor2Builder,
+        sorts: &MachineSorts,
+        stack_end: u64,
+        word_size: u64,
+        prog_name: &str,
+    ) -> (u64, NodeId) {
+        let name_bytes = prog_name.as_bytes();
+        // String size including NUL, aligned up to the word size.
+        let string_size = (name_bytes.len() as u64 + 1 + word_size - 1) & !(word_size - 1);
+        let string_start = stack_end - string_size;
+        // Below the string: env NULL, argv NULL, argv[0] pointer, argc.
+        let sp = string_start - 4 * word_size;
+
+        // Zeroed stack base (matching "zeroing stack segment" in C).
+        let byte_zero = builder.constd(sorts.sid_byte, 0, Some("byte 0".to_string()));
+        let stack_seg = builder.state(
+            sorts.sid_stack_state,
+            "initial-stack-base",
+            Some("base stack segment for boot loading (zeroed)".to_string()),
+        );
+        builder.init(
+            sorts.sid_stack_state,
+            stack_seg,
+            byte_zero,
+            Some("zeroing stack segment".to_string()),
+        );
+        let mut current = stack_seg;
+
+        // Write one machine word little-endian onto the zeroed base,
+        // skipping zero bytes.
+        let write_word = |builder: &mut Btor2Builder, current: NodeId, at: u64, value: u64, what: &str| {
+            let mut cur = current;
+            for byte_idx in 0..word_size {
+                let byte_val = (value >> (byte_idx * 8)) & 0xFF;
+                if byte_val == 0 {
+                    continue;
+                }
+                let addr = builder.constd(sorts.sid_stack_address, at + byte_idx, None);
+                let val = builder.constd(
+                    sorts.sid_byte,
+                    byte_val,
+                    Some(format!("{} byte {}", what, byte_idx)),
+                );
+                cur = builder.write(sorts.sid_stack_state, cur, addr, val, None);
+            }
+            cur
+        };
+
+        // argc = 1 at SP
+        current = write_word(builder, current, sp, 1, "argc");
+        // argv[0] pointer at SP + word
+        current = write_word(builder, current, sp + word_size, string_start, "argv[0] pointer");
+        // argv NULL terminator (SP + 2w) and env NULL terminator (SP + 3w)
+        // are zero — covered by the zeroed base.
+
+        // Program-name string bytes at string_start (NUL covered by base).
+        for (i, &b) in name_bytes.iter().enumerate() {
+            if b == 0 {
+                continue;
+            }
+            let addr = builder.constd(sorts.sid_stack_address, string_start + i as u64, None);
+            let val = builder.constd(
+                sorts.sid_byte,
+                b as u64,
+                Some(format!("argv[0][{}] = '{}'", i, b as char)),
+            );
+            current = builder.write(sorts.sid_stack_state, current, addr, val, None);
+        }
+
+        log::info!(
+            "Concrete argv: argc=1, argv[0]={:?}, string @ 0x{:x}, SP @ 0x{:x}",
+            prog_name,
+            string_start,
+            sp,
+        );
+
+        (sp, current)
     }
 
     /// Initialize symbolic argv on the stack.

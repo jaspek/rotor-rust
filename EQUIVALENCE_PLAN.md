@@ -82,7 +82,22 @@ virtual address` AND the inner property.
 
 ---
 
-## P0.3 — Concrete argv on the stack ❌
+## P0.3 — Concrete argv on the stack ✅ DONE
+
+Implemented `initialize_concrete_argv` (selfie boot-loader layout: argc=1 at
+SP, argv[0] pointer, argv/env NULL words, program-name string at the top,
+all on a zeroed base). Also completed P0.1 for the REGISTER FILE — the base
+register file is now zero-initialized like C ("zeroing register file"), only
+SP written; a0=argc is set only in symbolic-argv mode (C doesn't set it).
+
+Verified (division-by-zero): argv image present in model (string @
+0xFFFFFFE8, SP @ 0xFFFFFFC8, argc/pointer writes confirmed), catbtor +
+btormc PASS, symbolic-argv regression PASS. Deep run: spurious
+load-invalid-address GONE; now fires read-seg-fault (b22) instead of
+division-by-zero — attributable to remaining gaps P0.2 (read flow) and P1
+(read-seg-fault semantics: single pointer vs C's range-in-heap).
+
+### Original spec (for reference)
 
 C boot-loader writes argc + argv pointers + the program-path string onto the
 zeroed stack (see reference btor2 lines 10900-10926: word writes of the path
