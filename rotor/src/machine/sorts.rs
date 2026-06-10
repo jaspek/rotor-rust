@@ -236,6 +236,7 @@ pub struct MachineConstants {
     pub nid_read_syscall: NodeId,
     pub nid_write_syscall: NodeId,
     pub nid_openat_syscall: NodeId,
+    pub nid_open_syscall: NodeId,
     pub nid_brk_syscall: NodeId,
 }
 
@@ -426,6 +427,11 @@ impl MachineConstants {
             crate::riscv::isa::syscalls::OPENAT,
             Some("openat syscall id".to_string()),
         );
+        let nid_open_syscall = builder.constd(
+            sid_mw,
+            crate::riscv::isa::syscalls::OPEN,
+            Some("open syscall id (legacy)".to_string()),
+        );
         let nid_brk_syscall = builder.constd(
             sid_mw,
             crate::riscv::isa::syscalls::BRK,
@@ -455,6 +461,7 @@ impl MachineConstants {
             nid_read_syscall,
             nid_write_syscall,
             nid_openat_syscall,
+            nid_open_syscall,
             nid_brk_syscall,
         }
     }

@@ -292,6 +292,173 @@ impl Segmentation {
         }
     }
 
+    /// AND with the virtual-address validity guard when it exists
+    /// (C's does_machine_word_work_as_virtual_address, rotor.c:7706).
+    fn guard_vaddr(
+        &self,
+        builder: &mut Btor2Builder,
+        sorts: &MachineSorts,
+        addr: NodeId,
+        property: NodeId,
+    ) -> NodeId {
+        match self.is_machine_word_virtual_address(builder, sorts, addr) {
+            Some(ok) => builder.and_node(
+                sorts.sid_boolean,
+                ok,
+                property,
+                Some("does machine word work as virtual address?".to_string()),
+            ),
+            None => property,
+        }
+    }
+
+    /// Block [start, start+size] entirely inside ONE segment, with the
+    /// vaddr guard on the start address.
+    /// (C's is_sized_block_in_segment, rotor.c:7740.)
+    fn sized_block_in(
+        &self,
+        builder: &mut Btor2Builder,
+        sorts: &MachineSorts,
+        maddr: NodeId,
+        size: NodeId,
+        seg_start: NodeId,
+        seg_end: NodeId,
+        end_wrapped: bool,
+    ) -> NodeId {
+        let bool_sid = sorts.sid_boolean;
+        let mw_sid = sorts.sid_machine_word;
+        let end = builder.add(mw_sid, maddr, size, Some("start of block + size".to_string()));
+        let no_overflow = builder.ulte(
+            bool_sid,
+            maddr,
+            end,
+            Some("start of block <= end of block".to_string()),
+        );
+        let start_ok = builder.ugte(bool_sid, maddr, seg_start, None);
+        let in_seg = if end_wrapped {
+            start_ok
+        } else {
+            let end_ok = builder.ult(bool_sid, end, seg_end, None);
+            builder.and_node(
+                bool_sid,
+                start_ok,
+                end_ok,
+                Some("all virtual addresses in block in segment?".to_string()),
+            )
+        };
+        let block_ok = builder.and_node(bool_sid, no_overflow, in_seg, None);
+        self.guard_vaddr(builder, sorts, maddr, block_ok)
+    }
+
+    /// Block [maddr, maddr+size] entirely inside data, heap, OR stack
+    /// (C's is_sized_block_in_main_memory, rotor.c:7773). `size` is the
+    /// access width minus one (double word: 7, word: 3, half: 1, byte: 0).
+    pub fn is_sized_block_in_main_memory(
+        &self,
+        builder: &mut Btor2Builder,
+        sorts: &MachineSorts,
+        maddr: NodeId,
+        size: NodeId,
+    ) -> NodeId {
+        let bool_sid = sorts.sid_boolean;
+        let in_data = self.sized_block_in(
+            builder, sorts, maddr, size, self.data_start, self.data_end, false,
+        );
+        let in_heap = self.sized_block_in(
+            builder, sorts, maddr, size, self.heap_start, self.heap_end, false,
+        );
+        let in_stack = self.sized_block_in(
+            builder, sorts, maddr, size, self.stack_start, self.stack_end,
+            self.stack_end_wrapped,
+        );
+        let heap_or_stack = builder.or_node(
+            bool_sid,
+            in_heap,
+            in_stack,
+            Some("all virtual addresses in block in heap or stack segment?".to_string()),
+        );
+        builder.or_node(
+            bool_sid,
+            in_data,
+            heap_or_stack,
+            Some("all virtual addresses in block in main memory?".to_string()),
+        )
+    }
+
+    /// Single address inside data, heap, or stack, with the vaddr guard
+    /// (C's is_address_in_machine_word_in_main_memory, rotor.c:7725).
+    pub fn is_address_in_main_memory(
+        &self,
+        builder: &mut Btor2Builder,
+        sorts: &MachineSorts,
+        maddr: NodeId,
+    ) -> NodeId {
+        let valid = self.is_valid_write_address(builder, sorts, maddr);
+        self.guard_vaddr(builder, sorts, maddr, valid)
+    }
+
+    /// Single address inside the CODE segment, with the vaddr guard
+    /// (C's is_address_in_machine_word_in_segment on the code segment).
+    pub fn is_address_in_code_segment(
+        &self,
+        builder: &mut Btor2Builder,
+        sorts: &MachineSorts,
+        maddr: NodeId,
+    ) -> NodeId {
+        let in_code = self.is_in_code_segment(builder, sorts, maddr);
+        self.guard_vaddr(builder, sorts, maddr, in_code)
+    }
+
+    /// Single address inside the STACK segment, with the vaddr guard.
+    pub fn is_address_in_stack_segment(
+        &self,
+        builder: &mut Btor2Builder,
+        sorts: &MachineSorts,
+        maddr: NodeId,
+    ) -> NodeId {
+        let in_stack = self.is_in_stack_segment(builder, sorts, maddr);
+        self.guard_vaddr(builder, sorts, maddr, in_stack)
+    }
+
+    /// Range [maddr, maddr+range-1] entirely inside the HEAP segment, with
+    /// the vaddr guard on the range end
+    /// (C's is_range_in_machine_word_in_segment, rotor.c:7766).
+    /// Caller must guard range > 0.
+    pub fn is_range_in_heap_segment(
+        &self,
+        builder: &mut Btor2Builder,
+        sorts: &MachineSorts,
+        maddr: NodeId,
+        range: NodeId,
+        one: NodeId,
+    ) -> NodeId {
+        let bool_sid = sorts.sid_boolean;
+        let mw_sid = sorts.sid_machine_word;
+        let range_minus_1 = builder.sub(mw_sid, range, one, Some("range - 1".to_string()));
+        let end = builder.add(
+            mw_sid,
+            maddr,
+            range_minus_1,
+            Some("start of block + range - 1".to_string()),
+        );
+        let no_overflow = builder.ulte(
+            bool_sid,
+            maddr,
+            end,
+            Some("start of block <= end of block".to_string()),
+        );
+        let start_ok = builder.ugte(bool_sid, maddr, self.heap_start, None);
+        let end_ok = builder.ult(bool_sid, end, self.heap_end, None);
+        let in_heap = builder.and_node(
+            bool_sid,
+            start_ok,
+            end_ok,
+            Some("all virtual addresses in block in segment?".to_string()),
+        );
+        let block_ok = builder.and_node(bool_sid, no_overflow, in_heap, None);
+        self.guard_vaddr(builder, sorts, end, block_ok)
+    }
+
     /// Check if a virtual address is in any writable segment (data, heap, or stack).
     pub fn is_valid_write_address(
         &self,

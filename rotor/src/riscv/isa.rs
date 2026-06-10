@@ -416,6 +416,8 @@ pub mod syscalls {
     pub const READ: u64 = 63;
     pub const WRITE: u64 = 64;
     pub const OPENAT: u64 = 56;
+    /// Legacy open syscall, still recognized by selfie/rotor (rotor.c:681).
+    pub const OPEN: u64 = 1024;
     pub const BRK: u64 = 214;
 }
 

@@ -41,7 +41,11 @@ pub struct Config {
     pub check_exit_codes: bool,
     pub check_division_by_zero: bool,
     pub check_division_overflow: bool,
+    pub check_invalid_addresses: bool,
     pub check_seg_faults: bool,
+    /// Target exit code for bad/good-exit-code properties (C rotor's
+    /// "rotor ... - N": bad-exit-code fires on exit(N)).
+    pub target_exit_code: u64,
     // symbolic argv
     pub symbolic_argv: bool,
     pub symbolic_argc: usize,
@@ -73,7 +77,9 @@ impl Default for Config {
             check_exit_codes: false,
             check_division_by_zero: true,
             check_division_overflow: true,
+            check_invalid_addresses: true,
             check_seg_faults: true,
+            target_exit_code: 0,
             print_comments: true,
             propagate_constants: true,
         }

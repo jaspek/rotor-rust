@@ -1,25 +1,31 @@
 use crate::btor2::builder::Btor2Builder;
-use crate::config::Config;
+use crate::btor2::node::NodeId;
+use crate::config::{Config, Xlen};
 use crate::machine::core::CoreState;
-use crate::machine::kernel::KernelState;
 use crate::machine::registers::RegisterFile;
 use crate::machine::sorts::{MachineConstants, MachineSorts};
 use crate::model::combinational::CombinationalResult;
-use crate::riscv::isa::regs;
+use crate::riscv::isa::{regs, InstrId};
 
-/// Generate safety properties (bad states) for the model.
+/// Generate safety properties (bad states), ported 1:1 from the C reference
+/// (rotor.c rotor_properties at 11782 and kernel_properties at 11255).
 ///
-/// This emits the full set of bad-state properties that the C Rotor
-/// reference also emits, so btormc can check the same conditions. The
-/// properties are grouped:
+/// EMISSION ORDER MATTERS: btormc identifies properties by their position
+/// (b0, b1, ...). This function emits in the exact order of the C reference
+/// output so property indices line up between the two rotors:
 ///
-/// - exit conditions  (bad-exit, good-exit, exit)
-/// - arithmetic       (division-by-zero, signed-division-overflow)
-/// - decode           (illegal-instruction)
-/// - fetch            (fetch-invalid-address, fetch-unaligned, fetch-seg-fault)
-/// - load/store       (split into invalid-address vs seg-fault)
-/// - stack pointer    (sp-invalid-address, sp-seg-fault)
-/// - syscalls         (unknown-syscall-id, brk/openat/read/write-seg-fault)
+///   b0  illegal-instruction            b12 compressed-store-invalid-address
+///   b1  illegal-compressed-instruction b13 stack-pointer-invalid-address
+///   b2  known-instructions             b14 load-seg-fault
+///   b3  fetch-invalid-address          b15 store-seg-fault
+///   b4  fetch-unaligned                b16 compressed-load-seg-fault
+///   b5  fetch-seg-fault                b17 compressed-store-seg-fault
+///   b6  unknown-syscall-ID             b18 stack-pointer-seg-fault
+///   b7  division-by-zero               b19 brk-seg-fault
+///   b8  signed-division-overflow       b20 openat-seg-fault
+///   b9  load-invalid-address           b21 read-seg-fault
+///   b10 store-invalid-address          b22 write-seg-fault
+///   b11 compressed-load-invalid-addr   b23 bad-exit-code
 pub fn rotor_properties(
     builder: &mut Btor2Builder,
     sorts: &MachineSorts,
@@ -29,406 +35,730 @@ pub fn rotor_properties(
     comb: &CombinationalResult,
 ) {
     let bool_sid = sorts.sid_boolean;
+    let mw_sid = sorts.sid_machine_word;
+    let ir = comb.ir;
+    let kernel = &comb.kernel;
+    let seg = &core.segmentation;
 
-    // Decode the current syscall once; used by exit and syscall-seg-fault checks.
-    let a0_val = RegisterFile::load_register_by_index(
-        builder, sorts, consts, core.register_file_state, regs::A0,
-        Some("a0".to_string()),
-    );
-    let a1_val = RegisterFile::load_register_by_index(
-        builder, sorts, consts, core.register_file_state, regs::A1,
-        Some("a1".to_string()),
-    );
-    let a7_val = RegisterFile::load_register_by_index(
-        builder, sorts, consts, core.register_file_state, regs::A7,
-        Some("a7 (syscall id)".to_string()),
-    );
-    let syscall = KernelState::decode_syscall(builder, sorts, consts, a7_val);
+    // ---- shared helpers -----------------------------------------------
 
-    // ========================================================================
-    // EXIT CONDITIONS
-    // ========================================================================
-    if config.check_bad_exit_code {
-        let is_exit_ecall = builder.and_node(bool_sid, comb.is_ecall, syscall.is_exit, None);
-        let a0_nonzero = builder.neq(
+    // sp value (used by stack-pointer checks)
+    let sp_val = RegisterFile::load_register_by_index(
+        builder, sorts, consts, core.register_file_state, regs::SP,
+        Some("sp value".to_string()),
+    );
+
+    // access-size-minus-one constants for sized-block checks
+    let size_1 = consts.nid_machine_word_1; // half word
+    let size_3 = builder.constd(mw_sid, 3, Some("single word size - 1".to_string()));
+    let size_7 = builder.constd(mw_sid, 7, Some("double word size - 1".to_string()));
+
+    // instruction-class conditions by decoded id
+    let is_id = |builder: &mut Btor2Builder, id: InstrId| -> NodeId {
+        builder.eq_node(bool_sid, comb.instruction_id, consts.nid_instr_id(id), None)
+    };
+
+    // good-condition -> bad property: bad = NOT good (C's state_property).
+    macro_rules! bad_from_good {
+        ($good:expr, $name:expr, $comment:expr) => {{
+            let not_good = builder.not(bool_sid, $good, Some("targeting".to_string()));
+            builder.bad(not_good, $name, Some($comment.to_string()));
+        }};
+    }
+
+    // ====================================================================
+    // b0: illegal-instruction — illegal shift amounts (C is_illegal_shamt).
+    // RV64: slliw/srliw/sraiw (OP-IMM-32, funct3 001/101) with ir[25] set.
+    // RV32: slli/srli/srai (OP-IMM, funct3 001/101) with ir[25] set.
+    // ====================================================================
+    {
+        let opcode = builder.slice(sorts.sid_7bit, ir, 6, 0, Some("opcode".to_string()));
+        let funct3 = builder.slice(sorts.sid_3bit, ir, 14, 12, Some("funct3".to_string()));
+        let bit25 = builder.slice(sorts.sid_boolean, ir, 25, 25, Some("ir[25] (shamt[5])".to_string()));
+
+        let shift_funct = {
+            let f001 = builder.constd(sorts.sid_3bit, 0b001, None);
+            let f101 = builder.constd(sorts.sid_3bit, 0b101, None);
+            let is_sll = builder.eq_node(bool_sid, funct3, f001, None);
+            let is_srx = builder.eq_node(bool_sid, funct3, f101, None);
+            builder.or_node(bool_sid, is_sll, is_srx, Some("shift funct3?".to_string()))
+        };
+
+        let shamt_opcode_val: u64 = if config.xlen == Xlen::X64 {
+            0b0011011 // OP-IMM-32: 32-bit shifts on RV64 have 5-bit shamt
+        } else {
+            0b0010011 // OP-IMM: shifts on RV32 have 5-bit shamt
+        };
+        let shamt_opcode = builder.constd(sorts.sid_7bit, shamt_opcode_val, None);
+        let is_shamt_op = builder.eq_node(bool_sid, opcode, shamt_opcode, None);
+
+        let funct_and_op = builder.and_node(bool_sid, is_shamt_op, shift_funct, None);
+        let illegal_shamt = builder.and_node(
             bool_sid,
-            a0_val,
+            funct_and_op,
+            bit25,
+            Some("illegal shift amount?".to_string()),
+        );
+        builder.bad(
+            illegal_shamt,
+            "illegal-instruction",
+            Some("illegal instruction".to_string()),
+        );
+    }
+
+    // ====================================================================
+    // b1: illegal-compressed-instruction — illegal compressed imm/shamt
+    // (C is_illegal_compressed_instruction_imm_shamt). Self-gating on the
+    // compressed quadrants (c_ir[1:0] != 11), so it cannot fire on
+    // uncompressed code. Cases: c.addi4spn with nzuimm == 0 (including the
+    // all-zero illegal instruction); on RV32 c.slli/c.srli/c.srai with
+    // shamt[5] (c_ir[12]) set.
+    // ====================================================================
+    {
+        let c_ir = builder.slice(sorts.sid_half_word, ir, 15, 0, Some("compressed IR".to_string()));
+        let c_op = builder.slice(sorts.sid_2bit, c_ir, 1, 0, Some("compressed opcode".to_string()));
+        let c_funct3 = builder.slice(sorts.sid_3bit, c_ir, 15, 13, Some("compressed funct3".to_string()));
+
+        let c0 = builder.constd(sorts.sid_2bit, 0b00, None);
+        let is_c0 = builder.eq_node(bool_sid, c_op, c0, None);
+        let f000 = builder.constd(sorts.sid_3bit, 0b000, None);
+        let is_f000 = builder.eq_node(bool_sid, c_funct3, f000, None);
+
+        // c.addi4spn nzuimm = c_ir[12:5]; zero means illegal (covers 0x0000)
+        let nzuimm = builder.slice(sorts.sid_8bit, c_ir, 12, 5, Some("c.addi4spn nzuimm".to_string()));
+        let zero8 = builder.constd(sorts.sid_8bit, 0, None);
+        let nzuimm_zero = builder.eq_node(bool_sid, nzuimm, zero8, None);
+
+        let addi4spn = builder.and_node(bool_sid, is_c0, is_f000, None);
+        let mut illegal_c = builder.and_node(
+            bool_sid,
+            addi4spn,
+            nzuimm_zero,
+            Some("c.addi4spn with zero immediate (illegal)?".to_string()),
+        );
+
+        if config.xlen == Xlen::X32 {
+            // RV32: compressed shifts with shamt[5] (c_ir[12]) are illegal
+            let c1 = builder.constd(sorts.sid_2bit, 0b01, None);
+            let c2 = builder.constd(sorts.sid_2bit, 0b10, None);
+            let is_c1 = builder.eq_node(bool_sid, c_op, c1, None);
+            let is_c2 = builder.eq_node(bool_sid, c_op, c2, None);
+            let bit12 = builder.slice(sorts.sid_boolean, c_ir, 12, 12, None);
+
+            // c.srli/c.srai: C1, funct3 100
+            let f100 = builder.constd(sorts.sid_3bit, 0b100, None);
+            let is_f100 = builder.eq_node(bool_sid, c_funct3, f100, None);
+            let sr_c1 = builder.and_node(bool_sid, is_c1, is_f100, None);
+            // c.slli: C2, funct3 000
+            let slli_c2 = builder.and_node(bool_sid, is_c2, is_f000, None);
+            let shift_c = builder.or_node(bool_sid, sr_c1, slli_c2, None);
+            let illegal_shift = builder.and_node(
+                bool_sid, shift_c, bit12,
+                Some("compressed shift with shamt[5] on RV32 (illegal)?".to_string()),
+            );
+            illegal_c = builder.or_node(bool_sid, illegal_c, illegal_shift, None);
+        }
+
+        builder.bad(
+            illegal_c,
+            "illegal-compressed-instruction",
+            Some("illegal compressed instruction".to_string()),
+        );
+    }
+
+    // ====================================================================
+    // b2: known-instructions — good = decoder produced a known instruction
+    // (C is_enabled(instruction_ID)); bad = decoded Unknown.
+    // ====================================================================
+    builder.bad(
+        comb.is_unknown_instruction,
+        "known-instructions",
+        Some("known instructions".to_string()),
+    );
+
+    // ====================================================================
+    // b3-b5: fetch checks on the NEXT pc ("imminent fetch", C uses
+    // control_flow_nid = the kernel-adjusted next pc).
+    // ====================================================================
+    {
+        let next_pc = comb.next_pc;
+
+        // b3: fetch-invalid-address — next pc fits the virtual address space
+        let good = seg
+            .is_machine_word_virtual_address(builder, sorts, next_pc)
+            .unwrap_or(consts.nid_true);
+        bad_from_good!(good, "fetch-invalid-address", "imminent fetch at invalid address");
+
+        // b4: fetch-unaligned — next pc aligned to the instruction grid
+        // (2-byte with RVC, else 4-byte)
+        let mask_val: u64 = if config.enable_c { 1 } else { 3 };
+        let mask = builder.constd(mw_sid, mask_val, Some("instruction word size mask".to_string()));
+        let low = builder.and_node(mw_sid, next_pc, mask, Some("next pc alignment".to_string()));
+        let aligned = builder.eq_node(
+            bool_sid,
+            low,
             consts.nid_machine_word_0,
-            Some("exit code != 0".to_string()),
+            Some("next pc unaligned".to_string()),
         );
-        let bad_exit = builder.and_node(
-            bool_sid,
-            is_exit_ecall,
-            a0_nonzero,
-            Some("exit with non-zero code".to_string()),
-        );
-        builder.bad(bad_exit, "bad-exit-code", Some("exit(a0) where a0 != 0".to_string()));
+        bad_from_good!(aligned, "fetch-unaligned", "imminent unaligned fetch");
+
+        // b5: fetch-seg-fault — next pc within the code segment
+        let in_code = seg.is_address_in_code_segment(builder, sorts, next_pc);
+        bad_from_good!(in_code, "fetch-seg-fault", "imminent fetch segmentation fault");
     }
 
-    if config.check_good_exit_code {
-        let is_exit_ecall = builder.and_node(bool_sid, comb.is_ecall, syscall.is_exit, None);
-        let a0_zero = builder.eq_node(
+    // ====================================================================
+    // b6: unknown-syscall-ID — active ecall with unrecognized a7
+    // (exit, brk, openat/open, read, write are known).
+    // ====================================================================
+    {
+        let known1 = builder.or_node(bool_sid, kernel.is_exit, kernel.is_brk, None);
+        let known2 = builder.or_node(bool_sid, kernel.is_openat, kernel.is_read, None);
+        let known12 = builder.or_node(bool_sid, known1, known2, None);
+        let known = builder.or_node(
             bool_sid,
-            a0_val,
-            consts.nid_machine_word_0,
-            Some("exit code == 0".to_string()),
+            known12,
+            kernel.is_write,
+            Some("known syscall ID?".to_string()),
         );
-        let good_exit = builder.and_node(
+        let unknown = builder.not(bool_sid, known, None);
+        let bad = builder.and_node(
             bool_sid,
-            is_exit_ecall,
-            a0_zero,
-            Some("exit with zero code".to_string()),
+            kernel.active_ecall,
+            unknown,
+            Some("unknown syscall ID".to_string()),
         );
-        builder.bad(good_exit, "good-exit-code", Some("exit(0) reached".to_string()));
+        builder.bad(bad, "unknown-syscall-ID", Some("unknown syscall ID".to_string()));
     }
 
-    if config.check_exit_codes {
-        let is_exit_ecall = builder.and_node(bool_sid, comb.is_ecall, syscall.is_exit, None);
-        builder.bad(is_exit_ecall, "exit-ecall", Some("any exit syscall reached".to_string()));
-    }
-
-    // ========================================================================
-    // ARITHMETIC
-    // ========================================================================
+    // ====================================================================
+    // b7: division-by-zero
+    // ====================================================================
     if config.check_division_by_zero {
         builder.bad(
             comb.division_by_zero,
             "division-by-zero",
-            Some("division or remainder by zero".to_string()),
+            Some("division by zero".to_string()),
         );
     }
 
+    // ====================================================================
+    // b8: signed-division-overflow
+    // ====================================================================
     if config.check_division_overflow {
         builder.bad(
             comb.signed_division_overflow,
             "signed-division-overflow",
-            Some("signed div/rem of INT_MIN by -1".to_string()),
+            Some("signed division overflow".to_string()),
         );
     }
 
-    // ========================================================================
-    // DECODE
-    // ========================================================================
-    // Illegal instruction = decoder returned Unknown.
-    // We emit illegal-instruction, illegal-compressed-instruction, and the
-    // companion 'known-instructions' invariant — matching C Rotor's set.
-    if config.check_seg_faults {
-        builder.bad(
-            comb.is_unknown_instruction,
-            "illegal-instruction",
-            Some("decoder did not recognise the instruction".to_string()),
+    // ====================================================================
+    // b9-b13: invalid-address checks (addresses fit the virtual address
+    // space; C load/store_valid_address + stack pointer).
+    // ====================================================================
+    if config.check_invalid_addresses {
+        // b9: load-invalid-address
+        let load_addr_ok = seg
+            .is_machine_word_virtual_address(builder, sorts, comb.load_addr)
+            .unwrap_or(consts.nid_true);
+        let not_load = builder.not(bool_sid, comb.is_load, None);
+        let good = builder.or_node(
+            bool_sid,
+            not_load,
+            load_addr_ok,
+            Some("load at valid address?".to_string()),
+        );
+        bad_from_good!(good, "load-invalid-address", "load at invalid address");
+
+        // b10: store-invalid-address
+        let store_addr_ok = seg
+            .is_machine_word_virtual_address(builder, sorts, comb.store_addr)
+            .unwrap_or(consts.nid_true);
+        let not_store = builder.not(bool_sid, comb.writes_memory, None);
+        let good = builder.or_node(
+            bool_sid,
+            not_store,
+            store_addr_ok,
+            Some("store at valid address?".to_string()),
+        );
+        bad_from_good!(good, "store-invalid-address", "store at invalid address");
+
+        // b11/b12: compressed load/store invalid address. The compressed
+        // memory address (rs1'/sp + uimm) — gated on the instruction being
+        // a compressed load/store, so they cannot fire on uncompressed code.
+        let (c_load_addr, c_store_addr) =
+            compressed_mem_addresses(builder, sorts, consts, config, core, comb);
+
+        let ok = seg
+            .is_machine_word_virtual_address(builder, sorts, c_load_addr)
+            .unwrap_or(consts.nid_true);
+        let not_cl = builder.not(bool_sid, comb.is_compressed_load, None);
+        let good = builder.or_node(bool_sid, not_cl, ok, None);
+        bad_from_good!(
+            good,
+            "compressed-load-invalid-address",
+            "compressed load at invalid address"
         );
 
-        if config.enable_c {
-            builder.bad(
-                comb.is_unknown_compressed,
-                "illegal-compressed-instruction",
-                Some("compressed decoder did not recognise the 16-bit instruction".to_string()),
+        let ok = seg
+            .is_machine_word_virtual_address(builder, sorts, c_store_addr)
+            .unwrap_or(consts.nid_true);
+        let not_cs = builder.not(bool_sid, comb.is_compressed_store, None);
+        let good = builder.or_node(bool_sid, not_cs, ok, None);
+        bad_from_good!(
+            good,
+            "compressed-store-invalid-address",
+            "compressed store at invalid address"
+        );
+
+        // b13: stack-pointer-invalid-address
+        let sp_ok = seg
+            .is_machine_word_virtual_address(builder, sorts, sp_val)
+            .unwrap_or(consts.nid_true);
+        bad_from_good!(sp_ok, "stack-pointer-invalid-address", "stack pointer invalid address");
+    }
+
+    // ====================================================================
+    // b14-b18: segmentation-fault checks (sized blocks fully inside
+    // data ∪ heap ∪ stack; C load/store_no_seg_faults).
+    // ====================================================================
+    if config.check_seg_faults {
+        // per-width good conditions for loads at comb.load_addr
+        let block_d = seg.is_sized_block_in_main_memory(builder, sorts, comb.load_addr, size_7);
+        let block_w = seg.is_sized_block_in_main_memory(builder, sorts, comb.load_addr, size_3);
+        let block_h = seg.is_sized_block_in_main_memory(builder, sorts, comb.load_addr, size_1);
+        let addr_in = seg.is_address_in_main_memory(builder, sorts, comb.load_addr);
+
+        // good = for each load class: block fits; non-loads: TRUE
+        let mut good = consts.nid_true;
+        let mut apply = |builder: &mut Btor2Builder, good_acc: NodeId, cond: NodeId, ok: NodeId| {
+            let not_cond = builder.not(bool_sid, cond, None);
+            let implied = builder.or_node(bool_sid, not_cond, ok, None);
+            builder.and_node(bool_sid, good_acc, implied, None)
+        };
+
+        if config.xlen == Xlen::X64 {
+            let is_ld = is_id(builder, InstrId::Ld);
+            good = apply(builder, good, is_ld, block_d);
+            let is_lwu = is_id(builder, InstrId::Lwu);
+            good = apply(builder, good, is_lwu, block_w);
+        }
+        let is_lw = is_id(builder, InstrId::Lw);
+        good = apply(builder, good, is_lw, block_w);
+        let is_lh = is_id(builder, InstrId::Lh);
+        good = apply(builder, good, is_lh, block_h);
+        let is_lhu = is_id(builder, InstrId::Lhu);
+        good = apply(builder, good, is_lhu, block_h);
+        let is_lb = is_id(builder, InstrId::Lb);
+        good = apply(builder, good, is_lb, addr_in);
+        let is_lbu = is_id(builder, InstrId::Lbu);
+        good = apply(builder, good, is_lbu, addr_in);
+        bad_from_good!(good, "load-seg-fault", "load segmentation fault");
+
+        // stores at comb.store_addr
+        let block_d = seg.is_sized_block_in_main_memory(builder, sorts, comb.store_addr, size_7);
+        let block_w = seg.is_sized_block_in_main_memory(builder, sorts, comb.store_addr, size_3);
+        let block_h = seg.is_sized_block_in_main_memory(builder, sorts, comb.store_addr, size_1);
+        let addr_in = seg.is_address_in_main_memory(builder, sorts, comb.store_addr);
+
+        let mut good = consts.nid_true;
+        if config.xlen == Xlen::X64 {
+            let is_sd = is_id(builder, InstrId::Sd);
+            good = apply(builder, good, is_sd, block_d);
+        }
+        let is_sw = is_id(builder, InstrId::Sw);
+        good = apply(builder, good, is_sw, block_w);
+        let is_sh = is_id(builder, InstrId::Sh);
+        good = apply(builder, good, is_sh, block_h);
+        let is_sb = is_id(builder, InstrId::Sb);
+        good = apply(builder, good, is_sb, addr_in);
+        bad_from_good!(good, "store-seg-fault", "store segmentation fault");
+
+        // b16/b17: compressed load/store seg faults (word/double widths)
+        let (c_load_addr, c_store_addr) =
+            compressed_mem_addresses(builder, sorts, consts, config, core, comb);
+
+        let cl_w = seg.is_sized_block_in_main_memory(builder, sorts, c_load_addr, size_3);
+        let cl_d = seg.is_sized_block_in_main_memory(builder, sorts, c_load_addr, size_7);
+        let mut good = consts.nid_true;
+        let is_clw = {
+            let a = is_id(builder, InstrId::CLw);
+            let b = is_id(builder, InstrId::CLwsp);
+            builder.or_node(bool_sid, a, b, None)
+        };
+        good = apply(builder, good, is_clw, cl_w);
+        if config.xlen == Xlen::X64 {
+            let is_cld = {
+                let a = is_id(builder, InstrId::CLd);
+                let b = is_id(builder, InstrId::CLdsp);
+                builder.or_node(bool_sid, a, b, None)
+            };
+            good = apply(builder, good, is_cld, cl_d);
+        }
+        bad_from_good!(
+            good,
+            "compressed-load-seg-fault",
+            "compressed load segmentation fault"
+        );
+
+        let cs_w = seg.is_sized_block_in_main_memory(builder, sorts, c_store_addr, size_3);
+        let cs_d = seg.is_sized_block_in_main_memory(builder, sorts, c_store_addr, size_7);
+        let mut good = consts.nid_true;
+        let is_csw = {
+            let a = is_id(builder, InstrId::CSw);
+            let b = is_id(builder, InstrId::CSwsp);
+            builder.or_node(bool_sid, a, b, None)
+        };
+        good = apply(builder, good, is_csw, cs_w);
+        if config.xlen == Xlen::X64 {
+            let is_csd = {
+                let a = is_id(builder, InstrId::CSd);
+                let b = is_id(builder, InstrId::CSdsp);
+                builder.or_node(bool_sid, a, b, None)
+            };
+            good = apply(builder, good, is_csd, cs_d);
+        }
+        bad_from_good!(
+            good,
+            "compressed-store-seg-fault",
+            "compressed store segmentation fault"
+        );
+
+        // b18: stack-pointer-seg-fault — sp within the stack segment
+        let sp_in_stack = seg.is_address_in_stack_segment(builder, sorts, sp_val);
+        bad_from_good!(sp_in_stack, "stack-pointer-seg-fault", "stack pointer segmentation fault");
+
+        // ================================================================
+        // b19-b22: kernel seg-fault checks (C kernel_properties)
+        // ================================================================
+
+        // b19: brk-seg-fault — active brk with INVALID new program break.
+        // C (rotor.c:11336-11349): invalid = NOT(vaddr-ok(a0) AND
+        // a0 <= heap end). NOTE: no lower bound against the current brk in
+        // the PROPERTY (the data flow handles that); brk(0) queries are valid.
+        {
+            let a0_le_end = builder.ulte(
+                bool_sid,
+                kernel.a0,
+                seg.heap_end,
+                Some("new program break <= end of heap segment?".to_string()),
             );
+            let valid = match seg.is_machine_word_virtual_address(builder, sorts, kernel.a0) {
+                Some(vaddr_ok) => builder.and_node(
+                    bool_sid,
+                    vaddr_ok,
+                    a0_le_end,
+                    Some("does machine word work as virtual address?".to_string()),
+                ),
+                None => a0_le_end,
+            };
+            let invalid = builder.not(
+                bool_sid,
+                valid,
+                Some("is new program break invalid?".to_string()),
+            );
+            let bad = builder.and_node(
+                bool_sid,
+                kernel.active_brk,
+                invalid,
+                Some("invalid new program break with active brk system call".to_string()),
+            );
+            builder.bad(bad, "brk-seg-fault", Some("possible brk segmentation fault".to_string()));
         }
 
-        // known-instructions: same underlying condition as illegal-instruction
-        // (asserting the decoder produced a recognised id), emitted under its
-        // own name so the property set matches C Rotor's by name and count.
+        // b20: openat-seg-fault — filename access range
+        // [a1, a1 + MAX_STRING_LENGTH - 1] not fully inside the HEAP segment
+        // (C rotor.c:11353-11364, MAX_STRING_LENGTH = 128).
+        {
+            let max_string_length = builder.constd(
+                mw_sid,
+                128,
+                Some("maximum string length".to_string()),
+            );
+            let range_ok = seg.is_range_in_heap_segment(
+                builder, sorts, kernel.a1, max_string_length, consts.nid_machine_word_1,
+            );
+            let range_bad = builder.not(
+                bool_sid,
+                range_ok,
+                Some("is filename access not in heap segment?".to_string()),
+            );
+            let bad = builder.and_node(
+                bool_sid,
+                kernel.active_openat,
+                range_bad,
+                Some("openat system call filename access may cause segmentation fault".to_string()),
+            );
+            builder.bad(bad, "openat-seg-fault", Some("possible openat segmentation fault".to_string()));
+        }
+
+        // b21: read-seg-fault — checked only at the START of a read
+        // (read_bytes == 0): buffer range [a1, a1+a2) not fully in the HEAP
+        // segment while reading more than 0 bytes (C rotor.c:11366-11386).
+        {
+            let read_starting = {
+                let no_bytes_yet = builder.eq_node(
+                    bool_sid,
+                    core.kernel.read_bytes,
+                    consts.nid_machine_word_0,
+                    Some("have bytes been read yet?".to_string()),
+                );
+                builder.and_node(
+                    bool_sid,
+                    kernel.active_read,
+                    no_bytes_yet,
+                    Some("no bytes read yet by active read system call".to_string()),
+                )
+            };
+            let a2_gt_0 = builder.ugt(
+                bool_sid,
+                kernel.a2,
+                consts.nid_machine_word_0,
+                Some("bytes to be read > 0?".to_string()),
+            );
+            let range_ok = seg.is_range_in_heap_segment(
+                builder, sorts, kernel.a1, kernel.a2, consts.nid_machine_word_1,
+            );
+            let range_bad = builder.not(
+                bool_sid,
+                range_ok,
+                Some("is read system call access not in heap segment?".to_string()),
+            );
+            let cond = builder.and_node(
+                bool_sid,
+                a2_gt_0,
+                range_bad,
+                Some("may bytes to be read not be stored in heap segment?".to_string()),
+            );
+            let bad = builder.and_node(
+                bool_sid,
+                read_starting,
+                cond,
+                Some("storing bytes to be read may cause segmentation fault".to_string()),
+            );
+            builder.bad(bad, "read-seg-fault", Some("possible read segmentation fault".to_string()));
+        }
+
+        // b22: write-seg-fault — symmetric for writes
+        {
+            let a2_gt_0 = builder.ugt(
+                bool_sid,
+                kernel.a2,
+                consts.nid_machine_word_0,
+                Some("bytes to be written > 0?".to_string()),
+            );
+            let range_ok = seg.is_range_in_heap_segment(
+                builder, sorts, kernel.a1, kernel.a2, consts.nid_machine_word_1,
+            );
+            let range_bad = builder.not(
+                bool_sid,
+                range_ok,
+                Some("is write system call access not in heap segment?".to_string()),
+            );
+            let cond = builder.and_node(bool_sid, a2_gt_0, range_bad, None);
+            let bad = builder.and_node(
+                bool_sid,
+                kernel.active_write,
+                cond,
+                Some("loading bytes to be written may cause segmentation fault".to_string()),
+            );
+            builder.bad(bad, "write-seg-fault", Some("possible write segmentation fault".to_string()));
+        }
+    }
+
+    // ====================================================================
+    // b23: bad-exit-code — active exit AND a0 == target exit code
+    // (C: "rotor ... - N"; the reference benchmarks use N = 0).
+    // ====================================================================
+    if config.check_bad_exit_code {
+        let target = builder.constd(
+            mw_sid,
+            config.target_exit_code,
+            Some(format!("bad exit code {}", config.target_exit_code)),
+        );
+        let code_match = builder.eq_node(
+            bool_sid,
+            kernel.a0,
+            target,
+            Some("actual exit code == bad exit code?".to_string()),
+        );
+        let bad = builder.and_node(
+            bool_sid,
+            kernel.active_exit,
+            code_match,
+            Some("active exit system call with bad exit code".to_string()),
+        );
         builder.bad(
-            comb.is_unknown_instruction,
-            "known-instructions",
-            Some("invariant: decoder produces a known instruction id".to_string()),
+            bad,
+            "bad-exit-code",
+            Some(format!("exit({})", config.target_exit_code)),
         );
     }
 
-    // ========================================================================
-    // FETCH (PC validity)
-    // ========================================================================
-    if config.check_seg_faults {
-        // fetch-invalid-address: PC is outside every valid segment.
-        let pc_valid = core.segmentation.is_valid_read_address(builder, sorts, core.pc_state);
-        let pc_invalid = builder.not(bool_sid, pc_valid, Some("PC not in any segment?".to_string()));
-        builder.bad(
-            pc_invalid,
-            "fetch-invalid-address",
-            Some("imminent fetch at invalid address".to_string()),
+    // good-exit-code (optional, not in the reference run): exit with any
+    // OTHER code than the target.
+    if config.check_good_exit_code {
+        let target = builder.constd(
+            mw_sid,
+            config.target_exit_code,
+            Some(format!("good exit code {}", config.target_exit_code)),
         );
+        let code_differs = builder.neq(
+            bool_sid,
+            kernel.a0,
+            target,
+            Some("actual exit code != good exit code?".to_string()),
+        );
+        let bad = builder.and_node(
+            bool_sid,
+            kernel.active_exit,
+            code_differs,
+            Some("active exit system call with good exit code".to_string()),
+        );
+        builder.bad(
+            bad,
+            "good-exit-code",
+            Some(format!("exit({})", config.target_exit_code)),
+        );
+    }
+}
 
-        // fetch-unaligned: PC is not aligned to instruction size.
-        // RISC-V requires 4-byte alignment for non-compressed, 2-byte for compressed.
-        let mw_sid = sorts.sid_machine_word;
-        let align_mask = if config.enable_c {
-            builder.constd(mw_sid, 1, Some("alignment mask (2-byte)".to_string()))
+/// Compute the memory addresses of compressed loads and stores from the
+/// compressed instruction encoding (c_ir = low 16 bits of the fetched word).
+///
+///   c.lw/c.sw   (C0): rs1' + uimm[6:2]   where uimm[5:3]=c_ir[12:10],
+///                     uimm[2]=c_ir[6], uimm[6]=c_ir[5]
+///   c.ld/c.sd   (C0): rs1' + uimm[7:3]   where uimm[5:3]=c_ir[12:10],
+///                     uimm[7:6]=c_ir[6:5]
+///   c.lwsp      (C2): sp + uimm          uimm[5]=c_ir[12], uimm[4:2]=c_ir[6:4],
+///                     uimm[7:6]=c_ir[3:2]
+///   c.ldsp      (C2): sp + uimm          uimm[5]=c_ir[12], uimm[4:3]=c_ir[6:5],
+///                     uimm[8:6]=c_ir[4:2]
+///   c.swsp      (C2): sp + uimm          uimm[5:2]=c_ir[12:9], uimm[7:6]=c_ir[8:7]
+///   c.sdsp      (C2): sp + uimm          uimm[5:3]=c_ir[12:10], uimm[8:6]=c_ir[9:7]
+///
+/// Returns (load_address, store_address) selected per decoded instruction id;
+/// for non-compressed-memory instructions the value is unused (the properties
+/// gate on is_compressed_load/store).
+fn compressed_mem_addresses(
+    builder: &mut Btor2Builder,
+    sorts: &MachineSorts,
+    consts: &MachineConstants,
+    config: &Config,
+    core: &CoreState,
+    comb: &CombinationalResult,
+) -> (NodeId, NodeId) {
+    let bool_sid = sorts.sid_boolean;
+    let mw_sid = sorts.sid_machine_word;
+    let ir = comb.ir;
+
+    // helper: zero-extend a slice of c_ir into a machine word shifted left
+    let field = |builder: &mut Btor2Builder, hi: u32, lo: u32, shift: u32| -> NodeId {
+        let bits = hi - lo + 1;
+        let word_bits = config.machine_word_bits();
+        let sid = match bits {
+            1 => sorts.sid_boolean,
+            2 => sorts.sid_2bit,
+            3 => sorts.sid_3bit,
+            4 => sorts.sid_4bit,
+            _ => sorts.sid_5bit,
+        };
+        let s = builder.slice(sid, ir, hi, lo, None);
+        let ext = builder.uext(mw_sid, s, word_bits - bits, None);
+        if shift > 0 {
+            let sh = builder.constd(mw_sid, shift as u64, None);
+            builder.sll(mw_sid, ext, sh, None)
         } else {
-            builder.constd(mw_sid, 3, Some("alignment mask (4-byte)".to_string()))
-        };
-        let pc_low = builder.and_node(mw_sid, core.pc_state, align_mask, None);
-        let pc_unaligned = builder.neq(
-            bool_sid,
-            pc_low,
-            consts.nid_machine_word_0,
-            Some("PC not aligned?".to_string()),
-        );
-        builder.bad(
-            pc_unaligned,
-            "fetch-unaligned",
-            Some("imminent unaligned fetch".to_string()),
-        );
-
-        // fetch-seg-fault: PC is in a writable-only segment (i.e., not in code).
-        // Approximated as: PC is in data/heap/stack rather than code.
-        let in_data = core.segmentation.is_in_data_segment(builder, sorts, core.pc_state);
-        let in_heap = core.segmentation.is_in_heap_segment(builder, sorts, core.pc_state);
-        let in_stack = core.segmentation.is_in_stack_segment(builder, sorts, core.pc_state);
-        let in_writable_a = builder.or_node(bool_sid, in_data, in_heap, None);
-        let in_writable = builder.or_node(
-            bool_sid,
-            in_writable_a,
-            in_stack,
-            Some("PC in writable segment?".to_string()),
-        );
-        builder.bad(
-            in_writable,
-            "fetch-seg-fault",
-            Some("imminent fetch in writable segment (W^X violation)".to_string()),
-        );
-    }
-
-    // ========================================================================
-    // LOAD / STORE (granular split of the old generic seg-fault)
-    // ========================================================================
-    if config.check_seg_faults {
-        // load-invalid-address: load instruction with address not in any valid read segment.
-        builder.bad(
-            comb.load_invalid_address,
-            "load-invalid-address",
-            Some("load at address outside valid read segments".to_string()),
-        );
-
-        // store-invalid-address: store instruction with address not in any valid write segment.
-        builder.bad(
-            comb.store_invalid_address,
-            "store-invalid-address",
-            Some("store at address outside valid write segments".to_string()),
-        );
-
-        // load-seg-fault: load with address NOT in any segment (overlap with invalid-address
-        // but emitted separately so btormc can report it under this label, matching C Rotor's
-        // 24-property layout). Refined to: load address is in code segment (read-only) or
-        // beyond all segments.
-        let mw_sid = sorts.sid_machine_word;
-        let load_in_code = {
-            let ge = builder.ugte(bool_sid, comb.load_addr, core.segmentation.code_start, None);
-            let lt = builder.ult(bool_sid, comb.load_addr, core.segmentation.code_end, None);
-            builder.and_node(bool_sid, ge, lt, None)
-        };
-        let _ = mw_sid; // suppress unused if any branch removed
-        // Treat any load whose address is exactly in code as a (informational) load-seg-fault.
-        let load_seg = builder.and_node(bool_sid, comb.is_load, load_in_code, None);
-        builder.bad(
-            load_seg,
-            "load-seg-fault",
-            Some("load from code segment".to_string()),
-        );
-
-        // store-seg-fault: store into code segment is forbidden (W^X).
-        let store_in_code = {
-            let ge = builder.ugte(bool_sid, comb.store_addr, core.segmentation.code_start, None);
-            let lt = builder.ult(bool_sid, comb.store_addr, core.segmentation.code_end, None);
-            builder.and_node(bool_sid, ge, lt, None)
-        };
-        let store_seg = builder.and_node(bool_sid, comb.writes_memory, store_in_code, None);
-        builder.bad(
-            store_seg,
-            "store-seg-fault",
-            Some("store into code segment (W^X violation)".to_string()),
-        );
-
-        // Compressed-load/store address-validity checks.
-        // The compressed instructions reuse the same rs1+imm computation in the
-        // current model, so we reuse comb.load_addr / comb.store_addr but gate
-        // each bad node on the compressed-form flag from the decoder.
-        if config.enable_c {
-            // compressed-load-invalid-address
-            let cload_addr_valid = core
-                .segmentation
-                .is_valid_read_address(builder, sorts, comb.load_addr);
-            let cload_addr_invalid = builder.not(bool_sid, cload_addr_valid, None);
-            let cload_inv = builder.and_node(
-                bool_sid,
-                comb.is_compressed_load,
-                cload_addr_invalid,
-                Some("compressed load at invalid address?".to_string()),
-            );
-            builder.bad(
-                cload_inv,
-                "compressed-load-invalid-address",
-                Some("compressed load at address outside valid read segments".to_string()),
-            );
-
-            // compressed-store-invalid-address
-            let cstore_addr_valid = core
-                .segmentation
-                .is_valid_write_address(builder, sorts, comb.store_addr);
-            let cstore_addr_invalid = builder.not(bool_sid, cstore_addr_valid, None);
-            let cstore_inv = builder.and_node(
-                bool_sid,
-                comb.is_compressed_store,
-                cstore_addr_invalid,
-                Some("compressed store at invalid address?".to_string()),
-            );
-            builder.bad(
-                cstore_inv,
-                "compressed-store-invalid-address",
-                Some("compressed store at address outside valid write segments".to_string()),
-            );
-
-            // compressed-load-seg-fault — compressed load whose address is in code segment
-            let cload_in_code = {
-                let ge = builder.ugte(bool_sid, comb.load_addr, core.segmentation.code_start, None);
-                let lt = builder.ult(bool_sid, comb.load_addr, core.segmentation.code_end, None);
-                builder.and_node(bool_sid, ge, lt, None)
-            };
-            let cload_seg = builder.and_node(bool_sid, comb.is_compressed_load, cload_in_code, None);
-            builder.bad(
-                cload_seg,
-                "compressed-load-seg-fault",
-                Some("compressed load from code segment".to_string()),
-            );
-
-            // compressed-store-seg-fault — compressed store into code segment
-            let cstore_in_code = {
-                let ge = builder.ugte(bool_sid, comb.store_addr, core.segmentation.code_start, None);
-                let lt = builder.ult(bool_sid, comb.store_addr, core.segmentation.code_end, None);
-                builder.and_node(bool_sid, ge, lt, None)
-            };
-            let cstore_seg = builder.and_node(bool_sid, comb.is_compressed_store, cstore_in_code, None);
-            builder.bad(
-                cstore_seg,
-                "compressed-store-seg-fault",
-                Some("compressed store into code segment (W^X violation)".to_string()),
-            );
+            ext
         }
+    };
+
+    // register operands
+    let rs1_prime = {
+        // 8 + c_ir[9:7] as a 5-bit register index
+        let r = builder.slice(sorts.sid_3bit, ir, 9, 7, None);
+        let r5 = builder.uext(sorts.sid_register_address, r, 2, None);
+        let eight = builder.constd(sorts.sid_register_address, 8, None);
+        builder.add(sorts.sid_register_address, r5, eight, Some("rs1' = 8 + c_ir[9:7]".to_string()))
+    };
+    let rs1_prime_val = builder.read(mw_sid, core.register_file_state, rs1_prime,
+        Some("rs1' value".to_string()));
+    let sp_addr = consts.nid_register(regs::SP);
+    let sp_val = builder.read(mw_sid, core.register_file_state, sp_addr,
+        Some("sp value".to_string()));
+
+    // C0 word offsets: uimm[5:3]=c_ir[12:10]<<3, uimm[2]=c_ir[6]<<2, uimm[6]=c_ir[5]<<6
+    let w_53 = field(builder, 12, 10, 3);
+    let w_2 = field(builder, 6, 6, 2);
+    let w_6 = field(builder, 5, 5, 6);
+    let c0w_off = {
+        let t = builder.or_node(mw_sid, w_53, w_2, None);
+        builder.or_node(mw_sid, t, w_6, Some("c.lw/c.sw offset".to_string()))
+    };
+    // C0 double offsets: uimm[5:3]=c_ir[12:10]<<3, uimm[7:6]=c_ir[6:5]<<6
+    let d_53 = field(builder, 12, 10, 3);
+    let d_76 = field(builder, 6, 5, 6);
+    let c0d_off = builder.or_node(mw_sid, d_53, d_76, Some("c.ld/c.sd offset".to_string()));
+
+    // C2 lwsp: uimm[5]=c_ir[12]<<5, uimm[4:2]=c_ir[6:4]<<2, uimm[7:6]=c_ir[3:2]<<6
+    let lwsp_5 = field(builder, 12, 12, 5);
+    let lwsp_42 = field(builder, 6, 4, 2);
+    let lwsp_76 = field(builder, 3, 2, 6);
+    let lwsp_off = {
+        let t = builder.or_node(mw_sid, lwsp_5, lwsp_42, None);
+        builder.or_node(mw_sid, t, lwsp_76, Some("c.lwsp offset".to_string()))
+    };
+    // C2 ldsp: uimm[5]=c_ir[12]<<5, uimm[4:3]=c_ir[6:5]<<3, uimm[8:6]=c_ir[4:2]<<6
+    let ldsp_5 = field(builder, 12, 12, 5);
+    let ldsp_43 = field(builder, 6, 5, 3);
+    let ldsp_86 = field(builder, 4, 2, 6);
+    let ldsp_off = {
+        let t = builder.or_node(mw_sid, ldsp_5, ldsp_43, None);
+        builder.or_node(mw_sid, t, ldsp_86, Some("c.ldsp offset".to_string()))
+    };
+    // C2 swsp: uimm[5:2]=c_ir[12:9]<<2, uimm[7:6]=c_ir[8:7]<<6
+    let swsp_52 = field(builder, 12, 9, 2);
+    let swsp_76 = field(builder, 8, 7, 6);
+    let swsp_off = builder.or_node(mw_sid, swsp_52, swsp_76, Some("c.swsp offset".to_string()));
+    // C2 sdsp: uimm[5:3]=c_ir[12:10]<<3, uimm[8:6]=c_ir[9:7]<<6
+    let sdsp_53 = field(builder, 12, 10, 3);
+    let sdsp_86 = field(builder, 9, 7, 6);
+    let sdsp_off = builder.or_node(mw_sid, sdsp_53, sdsp_86, Some("c.sdsp offset".to_string()));
+
+    // addresses per form
+    let c0w_addr = builder.add(mw_sid, rs1_prime_val, c0w_off, None);
+    let c0d_addr = builder.add(mw_sid, rs1_prime_val, c0d_off, None);
+    let lwsp_addr = builder.add(mw_sid, sp_val, lwsp_off, None);
+    let ldsp_addr = builder.add(mw_sid, sp_val, ldsp_off, None);
+    let swsp_addr = builder.add(mw_sid, sp_val, swsp_off, None);
+    let sdsp_addr = builder.add(mw_sid, sp_val, sdsp_off, None);
+
+    let is_id = |builder: &mut Btor2Builder, id: InstrId| -> NodeId {
+        builder.eq_node(bool_sid, comb.instruction_id, consts.nid_instr_id(id), None)
+    };
+
+    // select load address by decoded id (default: c.lw form)
+    let mut load_addr = c0w_addr;
+    let is_clwsp = is_id(builder, InstrId::CLwsp);
+    load_addr = builder.ite(mw_sid, is_clwsp, lwsp_addr, load_addr, None);
+    if config.xlen == Xlen::X64 {
+        let is_cld = is_id(builder, InstrId::CLd);
+        load_addr = builder.ite(mw_sid, is_cld, c0d_addr, load_addr, None);
+        let is_cldsp = is_id(builder, InstrId::CLdsp);
+        load_addr = builder.ite(mw_sid, is_cldsp, ldsp_addr, load_addr, None);
     }
 
-    // ========================================================================
-    // STACK POINTER
-    // ========================================================================
-    if config.check_seg_faults {
-        let sp_val = RegisterFile::load_register_by_index(
-            builder, sorts, consts, core.register_file_state, regs::SP,
-            Some("sp (stack pointer)".to_string()),
-        );
-        // sp-invalid-address: SP not in any valid write segment.
-        let sp_valid = core.segmentation.is_valid_write_address(builder, sorts, sp_val);
-        let sp_invalid = builder.not(
-            bool_sid,
-            sp_valid,
-            Some("SP not in any valid segment?".to_string()),
-        );
-        builder.bad(
-            sp_invalid,
-            "stack-pointer-invalid-address",
-            Some("stack pointer outside valid segments".to_string()),
-        );
-
-        // sp-seg-fault: SP is in a non-stack segment (data, heap, or code).
-        let sp_in_stack = core.segmentation.is_in_stack_segment(builder, sorts, sp_val);
-        let sp_not_in_stack = builder.not(bool_sid, sp_in_stack, None);
-        let sp_in_some_segment = builder.or_node(bool_sid, sp_valid, sp_in_stack, None);
-        let sp_seg = builder.and_node(
-            bool_sid,
-            sp_in_some_segment,
-            sp_not_in_stack,
-            Some("SP in wrong segment?".to_string()),
-        );
-        builder.bad(
-            sp_seg,
-            "stack-pointer-seg-fault",
-            Some("stack pointer in non-stack segment".to_string()),
-        );
+    // select store address by decoded id (default: c.sw form)
+    let mut store_addr = c0w_addr;
+    let is_cswsp = is_id(builder, InstrId::CSwsp);
+    store_addr = builder.ite(mw_sid, is_cswsp, swsp_addr, store_addr, None);
+    if config.xlen == Xlen::X64 {
+        let is_csd = is_id(builder, InstrId::CSd);
+        store_addr = builder.ite(mw_sid, is_csd, c0d_addr, store_addr, None);
+        let is_csdsp = is_id(builder, InstrId::CSdsp);
+        store_addr = builder.ite(mw_sid, is_csdsp, sdsp_addr, store_addr, None);
     }
 
-    // ========================================================================
-    // SYSCALLS
-    // ========================================================================
-    if config.check_seg_faults {
-        // unknown-syscall-ID: ecall with a7 not matching any known syscall number.
-        let is_any_known = {
-            let a = builder.or_node(bool_sid, syscall.is_exit, syscall.is_read, None);
-            let b = builder.or_node(bool_sid, syscall.is_write, syscall.is_openat, None);
-            let c = builder.or_node(bool_sid, a, b, None);
-            builder.or_node(bool_sid, c, syscall.is_brk, Some("any known syscall?".to_string()))
-        };
-        let not_known = builder.not(bool_sid, is_any_known, None);
-        let unknown_syscall = builder.and_node(
-            bool_sid,
-            comb.is_ecall,
-            not_known,
-            Some("unknown syscall id?".to_string()),
-        );
-        builder.bad(
-            unknown_syscall,
-            "unknown-syscall-ID",
-            Some("ecall with unrecognised syscall number".to_string()),
-        );
-
-        // Per-syscall pointer-arg seg-fault checks.
-        // brk(a0): a0 is the new program break — if non-zero and not in a valid segment, bad.
-        let a0_valid_w = core.segmentation.is_valid_write_address(builder, sorts, a0_val);
-        let a0_is_zero = builder.eq_node(bool_sid, a0_val, consts.nid_machine_word_0, None);
-        let a0_nonzero = builder.not(bool_sid, a0_is_zero, None);
-        let a0_invalid = builder.not(bool_sid, a0_valid_w, None);
-        let brk_active = builder.and_node(bool_sid, comb.is_ecall, syscall.is_brk, None);
-        let brk_bad_arg = {
-            let a = builder.and_node(bool_sid, a0_nonzero, a0_invalid, None);
-            builder.and_node(bool_sid, brk_active, a, Some("brk with invalid new break?".to_string()))
-        };
-        builder.bad(
-            brk_bad_arg,
-            "brk-seg-fault",
-            Some("brk with invalid new program break".to_string()),
-        );
-
-        // openat/read/write all take a buffer pointer in a1.
-        let a1_valid_r = core.segmentation.is_valid_read_address(builder, sorts, a1_val);
-        let a1_invalid_r = builder.not(bool_sid, a1_valid_r, None);
-        let a1_valid_w = core.segmentation.is_valid_write_address(builder, sorts, a1_val);
-        let a1_invalid_w = builder.not(bool_sid, a1_valid_w, None);
-
-        let openat_active = builder.and_node(bool_sid, comb.is_ecall, syscall.is_openat, None);
-        let openat_bad = builder.and_node(
-            bool_sid,
-            openat_active,
-            a1_invalid_r,
-            Some("openat with invalid path pointer?".to_string()),
-        );
-        builder.bad(
-            openat_bad,
-            "openat-seg-fault",
-            Some("openat with invalid path pointer".to_string()),
-        );
-
-        let read_active = builder.and_node(bool_sid, comb.is_ecall, syscall.is_read, None);
-        let read_bad = builder.and_node(
-            bool_sid,
-            read_active,
-            a1_invalid_w,
-            Some("read into invalid buffer?".to_string()),
-        );
-        builder.bad(
-            read_bad,
-            "read-seg-fault",
-            Some("read into buffer outside valid write segments".to_string()),
-        );
-
-        let write_active = builder.and_node(bool_sid, comb.is_ecall, syscall.is_write, None);
-        let write_bad = builder.and_node(
-            bool_sid,
-            write_active,
-            a1_invalid_r,
-            Some("write from invalid buffer?".to_string()),
-        );
-        builder.bad(
-            write_bad,
-            "write-seg-fault",
-            Some("write from buffer outside valid read segments".to_string()),
-        );
-    }
+    (load_addr, store_addr)
 }

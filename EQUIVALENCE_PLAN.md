@@ -111,7 +111,30 @@ this is the direct cause of the division benchmark firing load-invalid.
 
 ---
 
-## P1 — Faithful property semantics ❌
+## P1 — Faithful property semantics ✅ DONE (includes P0.4)
+
+Full rewrite of properties.rs in the C reference's exact emission order
+(b0..b23 by name and index). All bodies ported from rotor.c, including the
+three that differed from initial inference (verified by reading the source):
+brk-seg-fault has NO lower bound (brk(0) queries valid), openat checks
+range [a1, a1+127] in heap, read-seg-fault fires only at read START
+(read_bytes == 0). Legacy open (1024) added to the openat decode. Compressed
+load/store addresses extracted from the real RVC encodings. Target exit
+code CLI flag added (P0.4): bad-exit-code = exit(target), default 0.
+
+**INDEX-EXACT EQUIVALENCE on division-by-zero-3-35:**
+```
+C reference:  bad state property 7 reachable at bound k = 76 SATISFIABLE
+Rust rotor:   bad state property 7 reachable at bound k = 76 SATISFIABLE
+```
+Same b-index, same name, same least-k. catbtor + btormc load PASS;
+symbolic-argv (--exit-code 1) regression PASS.
+
+NOTE: symbolic-argv users must now pass --exit-code 1 for "bug = exit(1)"
+benchmarks (old behavior was hardcoded a0 != 0); visualizer examples to be
+regenerated in P2.
+
+### Original spec (for reference)
 
 Our property bodies are wrong (I wrote approximations). Exact C definitions:
 

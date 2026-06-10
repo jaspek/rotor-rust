@@ -181,8 +181,14 @@ impl KernelState {
             Some("a7 == exit syscall ID?".to_string()));
         let is_brk = builder.eq_node(bool_sid, a7, consts.nid_brk_syscall,
             Some("a7 == brk syscall ID?".to_string()));
-        let is_openat = builder.eq_node(bool_sid, a7, consts.nid_openat_syscall,
-            Some("a7 == openat syscall ID?".to_string()));
+        let is_openat = {
+            let openat = builder.eq_node(bool_sid, a7, consts.nid_openat_syscall,
+                Some("a7 == openat syscall ID?".to_string()));
+            let open = builder.eq_node(bool_sid, a7, consts.nid_open_syscall,
+                Some("a7 == open syscall ID?".to_string()));
+            builder.or_node(bool_sid, openat, open,
+                Some("a7 == openat or open syscall ID?".to_string()))
+        };
         let is_read = builder.eq_node(bool_sid, a7, consts.nid_read_syscall,
             Some("a7 == read syscall ID?".to_string()));
         let is_write = builder.eq_node(bool_sid, a7, consts.nid_write_syscall,

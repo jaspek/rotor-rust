@@ -72,9 +72,17 @@ struct Cli {
     #[arg(long, default_value_t = true)]
     check_div_zero: bool,
 
+    /// Check for invalid (out-of-virtual-address-space) addresses
+    #[arg(long, default_value_t = true)]
+    check_invalid_addresses: bool,
+
     /// Check for segmentation faults
     #[arg(long, default_value_t = true)]
     check_seg_faults: bool,
+
+    /// Target exit code: bad-exit-code fires on exit(N) (C rotor's "- N")
+    #[arg(long, default_value_t = 0)]
+    exit_code: u64,
 
     /// Include comments in BTOR2 output
     #[arg(long, default_value_t = true)]
@@ -129,7 +137,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         check_exit_codes: cli.check_exit,
         check_division_by_zero: cli.check_div_zero,
         check_division_overflow: true,
+        check_invalid_addresses: cli.check_invalid_addresses,
         check_seg_faults: cli.check_seg_faults,
+        target_exit_code: cli.exit_code,
         print_comments: cli.comments,
         propagate_constants: true,
     };
