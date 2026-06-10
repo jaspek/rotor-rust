@@ -27,11 +27,22 @@ We address the three obstacles in three parts:
 
 | Part | Scope | Status |
 |------|-------|:------:|
-| 1 | Rust rewrite of the translator | **Complete** — same 24 bad-state properties as the C reference; 18/18 standard benchmarks give the same btormc verdict; selfie self-model takes 47 ms in 20 MB (vs 106 s / 431 MB for the C version). |
+| 1 | Rust rewrite of the translator | **Complete, semantic equivalence being verified benchmark-by-benchmark** — same 24 bad-state properties as the C reference *by name, index, and ported predicate*; on every deep-checked benchmark so far btormc fires the **same property at the same least bound k** from both rotors' models (e.g. division-by-zero: `b7 @ k=76` in both). Selfie self-model generates in 47 ms / 20 MB (vs 106 s / 431 MB for C). See `EQUIVALENCE_PLAN.md` and `P2_RESULTS.md`. |
 | 2 | Symbolic argv support | **Complete** — 5 benchmark programs, each with a bug reachable *only* via argv, are discovered by btormc within seconds. |
-| 3 | Witness-trace visualizer | **Complete** — browser tool with manifest-driven example picker (12 examples), full witness playback including array-valued symbolic inputs; available [live online](https://jaspek.github.io/rotor-rust/). |
+| 3 | Witness-trace visualizer | **Complete** — redesigned browser tool: example picker (12 examples), witness playback with timeline scrubber, drag & drop loading, keyboard shortcuts, full symbolic-input display; [live online](https://jaspek.github.io/rotor-rust/). |
 
 Code for each part lives in its own subdirectory: `rotor/`, `benchmarks/argv-tests/`, and `visualizer/`.
+
+**Semantic-equivalence campaign** (in response to supervisor feedback — *"check
+them yourself"*): the machine model was made faithful to the C reference piece
+by piece — zero-initialized memory and registers, page-aligned heap and full
+4 GB stack at `[0xFFFFF800, 2^32)`, concrete argc/argv boot image, the real
+read-syscall semantics (one input byte per transition with the PC stalled),
+file-descriptor state, and all 24 safety properties re-ported from `rotor.c`
+in the C output's exact emission order. Each step was verified with catbtor +
+btormc before the next. The deep harness (`benchmarks/run_deep_equivalence.ps1`)
+compares the fired property and least-k on both rotors at kmax=1500; results
+land in `benchmarks/deep_equivalence_results.csv`.
 
 Deliverables (slides, reports, and the full course paper) are published on the [GitHub releases page](../../releases) so the repository stays free of large binary artefacts. Generator scripts for the slide decks live under `presentations/scripts/`.
 
@@ -66,21 +77,29 @@ cargo build --release
 # Generate BTOR2 model from a RISC-V ELF binary
 rotor <binary.elf> -o model.btor2
 
+# Match the C reference settings (used by the equivalence harness)
+rotor <binary.elf> --bytes-to-read 1 --heap 2048 --stack 2048 --exit-code 0
+
 # RV32 mode
-rotor <binary.elf> --xlen 32
+rotor <binary.elf> --xlen x32
 
-# Enable compressed instructions
-rotor <binary.elf> --enable-c
+# Target exit code: bad-exit-code fires on exit(N) (C rotor's "rotor ... - N")
+rotor <binary.elf> --exit-code 1
 
-# Disable M extension
-rotor <binary.elf> --no-m
+# Symbolic command-line arguments (see Part 2)
+rotor <binary.elf> --symbolic-argv --num-symbolic-args 2 --max-arglen 8 --exit-code 1
+
+# Disable common-subexpression elimination (duplicate-check experiment)
+rotor <binary.elf> --no-cse
 
 # Code synthesis mode (symbolic code, no binary)
 rotor --synthesis -o model.btor2
-
-# With debug comments in output
-rotor <binary.elf> --comments
 ```
+
+Note: `bad-exit-code` follows the C reference semantics — it fires when the
+program exits **with** the target exit code (`--exit-code N`, default 0), not
+on any non-zero exit. For the argv benchmarks (which exit(1) on the bug) pass
+`--exit-code 1`.
 
 #### Architecture
 
@@ -142,9 +161,16 @@ Five C test programs in `benchmarks/argv-tests/` exercise different input-depend
 #### Generating argv Models
 
 ```bash
-# Compile with selfie, then generate BTOR2 with symbolic argv
-rotor <binary.elf> --symbolic-argv -o model-argv.btor2
+# Compile with selfie, then generate BTOR2 with symbolic argv.
+# The argv test programs exit(1) when the bug input is found, so the
+# target exit code is 1 (see the bad-exit-code note in Part 1).
+rotor <binary.elf> --symbolic-argv --num-symbolic-args 2 --max-arglen 8 \
+      --exit-code 1 -o model-argv.btor2
 ```
+
+Without `--symbolic-argv` the stack is booted with a CONCRETE argv image
+(argc=1, argv[0]=program name) exactly like the C reference boot loader —
+so default-mode models match the C rotor's machine.
 
 ### Part 3: BTOR2 Visualizer
 
@@ -159,7 +185,10 @@ An interactive web-based graph viewer for BTOR2 hardware models with witness tra
 - **Node collapse/expand**: Double-click nodes to collapse their subtrees
 - **Category clumping**: Group logic, state, memory, or constant nodes into single meta-nodes
 - **Longest path highlighting**: Visualize the critical path through the model
-- **Witness trace animation**: Step-by-step playback of btormc counterexample traces
+- **Witness trace animation**: Step-by-step playback of btormc counterexample traces, with a **timeline scrubber** for jumping to any step
+- **Drag & drop**: Drop a `.btor2` model or `.wit` witness anywhere in the window
+- **Keyboard shortcuts**: Space (play/pause), arrows (step), Home/End (jump), F (fit), +/− (zoom), / (search), ? (help overlay)
+- **Toasts & empty-state**: Load notifications, and a hero screen with one-click examples for first-time users
 - **Export**: PNG and SVG graph export
 - **Search**: Find nodes by ID, operation, or name
 - **Node shapes by category**: Octagon (bad), diamond (constant), barrel (input), pentagon (memory), hexagon (constraint)
@@ -218,11 +247,14 @@ Pre-generated BTOR2 models for 17+ selfie test programs:
 
 ```
 benchmarks/
-  btor2-rust-rotor/     Rust Rotor output (with and without argv)
-  btor2-c-rotor/        C Rotor reference output
-  binaries/             Compiled RISC-V binaries (.m format)
-  Dockerfile            Docker setup for selfie compilation
-  Dockerfile.btormc     Docker setup for btormc model checker
+  btor2-c-rotor/               C Rotor reference output (committed)
+  binaries/                    Compiled RISC-V binaries (.m format)
+  Dockerfile                   Docker setup for selfie compilation
+  Dockerfile.btormc            Docker setup for btormc model checker
+  run_deep_equivalence.ps1     THE equivalence harness: btormc at kmax=1500
+                               on both rotors, compares fired property + least-k
+  deep_equivalence_results.csv harness results (regenerated by the script)
+  run_equivalence_check.ps1    older shallow harness (kept for reference)
 ```
 
 #### Running Benchmarks
@@ -260,16 +292,40 @@ Both implementations of Rotor generate valid BTOR2 models that btormc can verify
 | Output BTOR2 size | 10.6 MB | **3.1 MB** | 3.4× smaller |
 | btormc validation (`catbtor` + `-kmax 0`) | — | **PASS** | — |
 
-#### Property-level equivalence
+#### Property-level equivalence (deep check: same property, same least-k)
+
+The strong test (see `EQUIVALENCE_PLAN.md`): run `btormc -kmax 1500` on both
+rotors' models of the same binary and require the **same bad-state property
+index** to fire at the **same least bound k**. Results so far
+(`benchmarks/deep_equivalence_results.csv`, harness still completing the
+deepest recursion benchmarks):
+
+| Benchmark | C reference | Rust rotor | Match |
+|---|---|---|:---:|
+| division-by-zero-3-35 | division-by-zero @ k=76 | division-by-zero @ k=76 | YES |
+| invalid-memory-access-fail-2-35 | store-invalid-address @ k=79 | store-invalid-address @ k=79 | YES |
+| memory-access-fail-1-35 | load-seg-fault @ k=66 | load-seg-fault @ k=66 | YES |
+| nested-if-else-1-35 | bad-exit-code @ k=100 | bad-exit-code @ k=100 | YES |
+| nested-if-else-reverse-1-35 | bad-exit-code @ k=103 | bad-exit-code @ k=103 | YES |
+
+This required making the machine model faithful to the C reference:
+zero-initialized segments and registers, page-aligned heap, full 4 GB stack
+(`[0xFFFFF800, 2^32)`), the concrete argc/argv boot image, the real
+read-syscall data flow (one input byte per transition, PC stalled while
+reading), file-descriptor state, and all 24 properties ported predicate-by-
+predicate from `rotor.c` in the C output's exact emission order.
 
 | Aspect | C Rotor | Rust Rotor |
 |---|---|---|
-| **Bad-state properties** | 24 (by name) | **24** — same set, same names |
-| **18-benchmark btormc verdict at depth 35** | reference | **18 / 18 match** |
-| **Deduplication algorithm** | linear scan, O(N²) total (turned off for binary-loading section because of cost) | HashMap lookup, O(N) total (left on everywhere) |
+| **Bad-state properties** | 24 | **24** — same names, same order, same predicates |
+| **Deduplication algorithm** | linear list scan, O(N²) total | HashMap lookup, O(N) total |
+| **Dedup disabled** (supervisor's experiment) | **crashes** (`ite then sort mismatch`, exit 14) — the C generator relies on line reuse for node identity | works (`--no-cse`): models grow ~1.43× and stay catbtor-valid |
 | **Initialization encoding** | Unfolded over time steps (`zeroed-*` → `loaded-*`) | Direct `init` statements from binary data |
 
-The Rust output's smaller size comes from two places: leaving CSE turned on for the binary-loading section (which the C version had to switch off for performance) and the more compact `init`-based initialization encoding. Both rotors emit the same set of `bad` nodes by name — `bad-exit-code`, `division-by-zero`, `illegal-instruction`, `fetch-invalid-address`, `load-seg-fault`, `stack-pointer-invalid-address`, `unknown-syscall-ID`, etc. — and produce the same verdict on the 18 standard benchmarks at depth 35.
+The dedup experiment confirms the speed difference is purely the data
+structure (constant-time lookups vs linear scans over millions of checks),
+not a difference in what gets deduplicated — and that dedup is semantically
+neutral in the Rust implementation.
 
 ### Verification
 
