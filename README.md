@@ -327,6 +327,35 @@ structure (constant-time lookups vs linear scans over millions of checks),
 not a difference in what gets deduplicated — and that dedup is semantically
 neutral in the Rust implementation.
 
+#### Why do the file sizes differ if the models contain the same things?
+
+Because BTOR2 file size is a *syntactic* artifact — the same content can be
+spelled differently. Measured decomposition of the selfie self-models
+(C: 138,820 lines / 10.6 MB; Rust: 110,904 lines / 3.1 MB):
+
+| Factor | C rotor | Rust rotor |
+|---|---|---|
+| comment bytes | **5.24 MB** (49.5% of the file) | 0.15 MB |
+| constant encoding | 32/64-digit **binary strings** (`const`, avg 65–83 chars/line) | decimal (`constd`, avg 24 chars/line) |
+| nid magnitude | avg **7 digits** (structured namespaces) | avg 5 digits (sequential) |
+| constant lines | 90,257 (dedup off in the loading section → ~33k duplicates) | 57,478 (dedup on globally) |
+| avg line length | 75.3 chars | 27.2 chars |
+
+~95% of both files is the same thing — the init chain writing selfie's
+binary image into memory. One loaded instruction in C:
+
+```
+1000004 const 4 10000101100000101000001010010011 ; code 0x85828293
+```
+
+The Rust file writes the same word as a ~24-character decimal `constd` with
+a short comment. Same meaning, a third of the characters. The statement
+counts (138.6k vs 110.9k, only 1.25x apart) show the *content* is nearly
+identical; the byte ratio (3.4x) is comments + binary-string constants +
+longer nids. Think pretty-printed JSON with comments vs the same JSON
+minified — and the P2 equivalence results are the proof that the meaning is
+preserved: btormc returns the same verdict at the same bound from both.
+
 ### Verification
 
 The generated BTOR2 models can be verified with:
