@@ -2,6 +2,7 @@ use crate::btor2::builder::Btor2Builder;
 use crate::btor2::node::NodeId;
 use crate::config::{Config, Xlen};
 use crate::machine::core::CoreState;
+use crate::machine::kernel::KernelState;
 use crate::machine::memory::Memory;
 use crate::machine::registers::RegisterFile;
 use crate::machine::sorts::{MachineConstants, MachineSorts};
@@ -58,6 +59,9 @@ pub struct CombinationalResult {
     pub load_invalid_address: NodeId,
     /// Granular store-side address invalidity (active only on stores).
     pub store_invalid_address: NodeId,
+    /// All combinational kernel/syscall signals for this step
+    /// (C rotor's kernel_combinational).
+    pub kernel: crate::machine::kernel::KernelFlows,
 }
 
 /// Generate the combinational logic for one core:
@@ -766,6 +770,51 @@ pub fn rotor_combinational(
         Some("is ecall?".to_string()),
     );
 
+    // ===== KERNEL COMBINATIONAL (C rotor kernel_combinational) =====
+    // All per-step syscall signals: brk/openat/read/write decode, the brk
+    // validity check, the read-progress helpers, and the read return value.
+    let kernel = KernelState::kernel_combinational(
+        builder,
+        sorts,
+        consts,
+        config,
+        &core.kernel,
+        core.register_file_state,
+        core.segmentation.heap_end,
+        is_ecall,
+    );
+
+    // Kernel control-flow stall (C rotor rotor.c:11037-11051):
+    // PC freezes forever on exit, and while a read syscall still has more
+    // than one byte to deliver (the read executes one byte per transition).
+    let next_pc = {
+        let ongoing_read = builder.and_node(
+            bool_sid,
+            kernel.is_read,
+            kernel.more_than_one_readable_byte_to_read,
+            Some("ongoing read system call".to_string()),
+        );
+        let exit_or_read = builder.or_node(
+            bool_sid,
+            kernel.is_exit,
+            ongoing_read,
+            Some("ongoing exit or read system call".to_string()),
+        );
+        let stall = builder.and_node(
+            bool_sid,
+            is_ecall,
+            exit_or_read,
+            Some("active system call stalls PC".to_string()),
+        );
+        builder.ite(
+            mw_sid,
+            stall,
+            core.pc_state,
+            next_pc,
+            Some("update program counter unless in kernel mode".to_string()),
+        )
+    };
+
     // Store width (as machine word for convenience)
     let store_width = {
         let w1 = consts.nid_machine_word_1;
@@ -832,5 +881,6 @@ pub fn rotor_combinational(
         invalid_address,
         load_invalid_address,
         store_invalid_address,
+        kernel,
     }
 }

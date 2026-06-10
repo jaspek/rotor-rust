@@ -149,7 +149,22 @@ openat-seg-fault, read-seg-fault, write-seg-fault, bad-exit-code.
 
 ---
 
-## P0.2 — read-syscall data flow + PC stall ❌
+## P0.2 — read-syscall data flow + PC stall ✅ DONE (includes P0.5)
+
+Full port of C's kernel_combinational + kernel_sequential: per-step syscall
+decode, brk validity, fd increment (P0.5 file-descriptor state included),
+read-progress helpers, exact nested-ITE read return value, PC stall on exit
+and ongoing reads, one-input-byte-per-transition heap delivery, read_bytes
+reset-to-zero, input-buffer freeze (self-loop next).
+
+**VERIFIED EQUIVALENCE DATA POINT (division-by-zero-3-35):**
+- C reference: division-by-zero SATISFIABLE at bound k = 76
+- Rust rotor:  division-by-zero SATISFIABLE at bound k = 76
+Same property, same least-k. catbtor + btormc load PASS, symbolic-argv
+regression PASS. Property INDEX differs (b1 vs b7) until P1 fixes emission
+order.
+
+### Original spec (for reference)
 
 C (`kernel_combinational` 11131, `kernel_sequential` 11225):
 - While `still_reading_active_read`: PC stalls (control_flow = pc, not next).

@@ -2,7 +2,6 @@ use crate::btor2::builder::Btor2Builder;
 use crate::btor2::node::NodeId;
 use crate::config::Config;
 use crate::machine::core::CoreState;
-use crate::machine::kernel::KernelState;
 use crate::machine::memory::Memory;
 use crate::machine::registers::RegisterFile;
 use crate::machine::sorts::{MachineConstants, MachineSorts};
@@ -37,36 +36,9 @@ pub fn rotor_sequential(
 
     // ===== REGISTER FILE =====
     // Compute the new register file state after this instruction.
-
-    // Handle ecall: write return value to a0
-    let a7_val = RegisterFile::load_register_by_index(
-        builder,
-        sorts,
-        consts,
-        core.register_file_state,
-        isa::regs::A7,
-        Some("a7 (syscall id)".to_string()),
-    );
-    let a0_val = RegisterFile::load_register_by_index(
-        builder,
-        sorts,
-        consts,
-        core.register_file_state,
-        isa::regs::A0,
-        Some("a0 (syscall arg)".to_string()),
-    );
-
-    let syscall = KernelState::decode_syscall(builder, sorts, consts, a7_val);
-
-    let ecall_return = KernelState::ecall_return_value(
-        builder,
-        sorts,
-        consts,
-        &syscall,
-        a0_val,
-        core.kernel.program_break,
-        core.kernel.readable_bytes,
-    );
+    // All kernel/syscall signals come precomputed from the combinational
+    // phase (C rotor's kernel_combinational), via comb.kernel.
+    let kernel = &comb.kernel;
 
     // Normal rd write
     let reg_after_rd = RegisterFile::conditional_store(
@@ -79,36 +51,82 @@ pub fn rotor_sequential(
         Some("write rd".to_string()),
     );
 
-    // Ecall a0 write
+    // Kernel register data flow — C rotor's exact nested ITE
+    // (rotor.c:11077-11119):
+    //   ecall ? (brk    ? regs[a0 := eval_program_break]
+    //          : openat ? regs[a0 := fd + 1]
+    //          : (read AND returning) ? regs[a0 := read_return_value]
+    //          : write  ? regs[a0 := a2]
+    //          : regs)
+    //   : instruction register data flow
     let a0_addr = consts.nid_register(isa::regs::A0);
-    let reg_after_ecall = RegisterFile::store_register(
-        builder,
-        sorts,
-        core.register_file_state,
-        a0_addr,
-        ecall_return,
-        Some("ecall: write a0".to_string()),
+    let reg_sid = sorts.sid_register_state;
+
+    let regs_brk = RegisterFile::store_register(
+        builder, sorts, core.register_file_state, a0_addr,
+        kernel.eval_program_break,
+        Some("store new program break in a0".to_string()),
+    );
+    let regs_openat = RegisterFile::store_register(
+        builder, sorts, core.register_file_state, a0_addr,
+        kernel.eval_file_descriptor,
+        Some("store new file descriptor in a0".to_string()),
+    );
+    let regs_read = RegisterFile::store_register(
+        builder, sorts, core.register_file_state, a0_addr,
+        kernel.read_return_value,
+        Some("store read return value in a0".to_string()),
+    );
+    let regs_write = RegisterFile::store_register(
+        builder, sorts, core.register_file_state, a0_addr,
+        kernel.a2,
+        Some("store write return value in a0".to_string()),
     );
 
-    // Select: if writes_rd, use reg_after_rd; if ecall, use reg_after_ecall; else keep same
+    // read returns only when there is at most one more byte to read
+    let read_returning = {
+        let not_more = builder.not(
+            bool_sid,
+            kernel.more_than_one_readable_byte_to_read,
+            Some("read system call returns if at most one more byte to read".to_string()),
+        );
+        builder.and_node(
+            bool_sid,
+            kernel.is_read,
+            not_more,
+            Some("update a0 when read system call returns".to_string()),
+        )
+    };
+
+    let mut kernel_regs = core.register_file_state;
+    kernel_regs = builder.ite(reg_sid, kernel.is_write, regs_write, kernel_regs,
+        Some("write system call register data flow".to_string()));
+    kernel_regs = builder.ite(reg_sid, read_returning, regs_read, kernel_regs,
+        Some("read system call register data flow".to_string()));
+    kernel_regs = builder.ite(reg_sid, kernel.is_openat, regs_openat, kernel_regs,
+        Some("openat system call register data flow".to_string()));
+    kernel_regs = builder.ite(reg_sid, kernel.is_brk, regs_brk, kernel_regs,
+        Some("brk system call register data flow".to_string()));
+
+    // Instruction register data flow (rd write), then ecall branch wins.
     let mut next_regs = core.register_file_state;
     next_regs = builder.ite(
-        sorts.sid_register_state,
+        reg_sid,
         comb.writes_rd,
         reg_after_rd,
         next_regs,
         Some("register update (rd)".to_string()),
     );
     next_regs = builder.ite(
-        sorts.sid_register_state,
+        reg_sid,
         comb.is_ecall,
-        reg_after_ecall,
+        kernel_regs,
         next_regs,
-        Some("register update (ecall)".to_string()),
+        Some("register data flow".to_string()),
     );
 
     builder.next(
-        sorts.sid_register_state,
+        reg_sid,
         core.register_file_state,
         next_regs,
         Some("next register file".to_string()),
@@ -118,66 +136,97 @@ pub fn rotor_sequential(
     // Store operations: write to the appropriate segment
     sequential_memory(builder, sorts, consts, config, core, comb);
 
-    // ===== KERNEL STATE =====
-    // Program break update on brk syscall
-    let next_brk = KernelState::next_program_break(
-        builder,
-        sorts,
-        consts,
-        core.kernel.program_break,
-        a0_val,
-        syscall.is_brk,
-        comb.is_ecall,
-    );
+    // ===== KERNEL STATE ===== (C rotor kernel_sequential, rotor.c:11153-11253)
 
+    // Program break: updated only by an active brk syscall, to the validated
+    // new break (eval_program_break already checks [brk, heap_end]).
+    let next_brk = builder.ite(
+        mw_sid,
+        kernel.active_brk,
+        kernel.eval_program_break,
+        core.kernel.program_break,
+        Some("new program break".to_string()),
+    );
     builder.next(
-        sorts.sid_machine_word,
+        mw_sid,
         core.kernel.program_break,
         next_brk,
-        Some("next program break".to_string()),
+        Some("new program break".to_string()),
     );
 
-    // Readable bytes: decrement on read syscall (simplified)
-    let is_read_ecall = builder.and_node(bool_sid, comb.is_ecall, syscall.is_read, None);
+    // File descriptor: incremented by an active openat syscall.
+    let next_fd = builder.ite(
+        mw_sid,
+        kernel.active_openat,
+        kernel.eval_file_descriptor,
+        core.kernel.file_descriptor,
+        Some("new file descriptor".to_string()),
+    );
+    builder.next(
+        mw_sid,
+        core.kernel.file_descriptor,
+        next_fd,
+        Some("new file descriptor".to_string()),
+    );
+
+    // Readable bytes: decrement WHILE the read syscall is still reading
+    // (one byte per transition).
     let decremented = builder.sub(
         mw_sid,
         core.kernel.readable_bytes,
         consts.nid_machine_word_1,
-        None,
+        Some("decrement readable bytes".to_string()),
     );
     let next_readable = builder.ite(
         mw_sid,
-        is_read_ecall,
+        kernel.still_reading_active_read,
         decremented,
         core.kernel.readable_bytes,
-        Some("next readable bytes".to_string()),
+        Some("decrement readable bytes if system call is still reading".to_string()),
     );
     builder.next(
-        sorts.sid_machine_word,
+        mw_sid,
         core.kernel.readable_bytes,
         next_readable,
-        Some("next readable bytes".to_string()),
+        Some("readable bytes".to_string()),
     );
 
-    // Read bytes counter: increment on read syscall
+    // Read-bytes counter: increments while the active read continues, and
+    // RESETS TO ZERO otherwise (including when the read completes) — exactly
+    // like C rotor (rotor.c:11237-11252).
+    let read_continuing = builder.and_node(
+        bool_sid,
+        kernel.active_read,
+        kernel.more_than_one_readable_byte_to_read,
+        Some("more than one byte to read by active read system call".to_string()),
+    );
     let incremented = builder.add(
         mw_sid,
         core.kernel.read_bytes,
         consts.nid_machine_word_1,
-        None,
+        Some("increment bytes already read by read system call".to_string()),
     );
     let next_read = builder.ite(
         mw_sid,
-        is_read_ecall,
+        read_continuing,
         incremented,
-        core.kernel.read_bytes,
-        Some("next read bytes".to_string()),
+        consts.nid_machine_word_0,
+        Some("increment bytes already read if read system call is active".to_string()),
     );
     builder.next(
-        sorts.sid_machine_word,
+        mw_sid,
         core.kernel.read_bytes,
         next_read,
-        Some("next read bytes counter".to_string()),
+        Some("bytes already read in active read system call".to_string()),
+    );
+
+    // Input buffer: frozen (read-only). Without an explicit self-loop next,
+    // BTOR2 would let the solver re-choose the buffer at every step.
+    builder.next(
+        sorts.sid_input_buffer,
+        core.kernel.input_buffer,
+        core.kernel.input_buffer,
+        Some("read-only uninitialized input buffer".to_string()),
     );
 }
 
@@ -327,6 +376,52 @@ fn sequential_memory(
         core.heap_segment_state,
         Some("next heap segment".to_string()),
     );
+
+    // Kernel read data flow (C rotor rotor.c:11131-11148): while a read
+    // syscall is still reading, store ONE input byte per transition into the
+    // heap at a1 + read_bytes. The byte comes from
+    // input_buffer[bytes_to_read - readable_bytes].
+    let next_heap = {
+        let kernel = &comb.kernel;
+        let bytes_to_read = builder.constd(
+            sorts.sid_machine_word,
+            config.bytes_to_read,
+            Some(format!("bytes to read {}", config.bytes_to_read)),
+        );
+        let input_index = builder.sub(
+            sorts.sid_machine_word,
+            bytes_to_read,
+            core.kernel.readable_bytes,
+            Some("input address".to_string()),
+        );
+        let input_byte = builder.read(
+            sorts.sid_byte,
+            core.kernel.input_buffer,
+            input_index,
+            Some("read input byte".to_string()),
+        );
+        let dest_addr = builder.add(
+            sorts.sid_machine_word,
+            kernel.a1,
+            core.kernel.read_bytes,
+            Some("a1 + number of already read bytes".to_string()),
+        );
+        let heap_after_read = builder.write(
+            sorts.sid_heap_state,
+            core.heap_segment_state,
+            dest_addr,
+            input_byte,
+            Some("store input byte in heap segment".to_string()),
+        );
+        builder.ite(
+            sorts.sid_heap_state,
+            kernel.still_reading_active_read,
+            heap_after_read,
+            next_heap,
+            Some("heap segment data flow".to_string()),
+        )
+    };
+
     builder.next(
         sorts.sid_heap_state,
         core.heap_segment_state,
