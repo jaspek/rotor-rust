@@ -296,9 +296,9 @@ Both implementations of Rotor generate valid BTOR2 models that btormc can verify
 
 The strong test (see `EQUIVALENCE_PLAN.md`): run `btormc -kmax 1500` on both
 rotors' models of the same binary and require the **same bad-state property
-index** to fire at the **same least bound k**. Results so far
-(`benchmarks/deep_equivalence_results.csv`, harness still completing the
-deepest recursion benchmarks):
+index** to fire at the **same least bound k**. **FINAL RESULT: 18/18
+benchmarks equivalent** (`benchmarks/deep_equivalence_results.csv`; full
+table and methodology in `P2_RESULTS.md`). Highlights:
 
 | Benchmark | C reference | Rust rotor | Match |
 |---|---|---|:---:|
@@ -306,7 +306,10 @@ deepest recursion benchmarks):
 | invalid-memory-access-fail-2-35 | store-invalid-address @ k=79 | store-invalid-address @ k=79 | YES |
 | memory-access-fail-1-35 | load-seg-fault @ k=66 | load-seg-fault @ k=66 | YES |
 | nested-if-else-1-35 | bad-exit-code @ k=100 | bad-exit-code @ k=100 | YES |
-| nested-if-else-reverse-1-35 | bad-exit-code @ k=103 | bad-exit-code @ k=103 | YES |
+| recursive-ackermann-1-35 | bad-exit-code @ k=152 | bad-exit-code @ k=152 | YES |
+| three-level-nested-loop-fail | bad-exit-code @ k=103 | bad-exit-code @ k=103 | YES |
+| return-from-loop / nested-recursion | UNSAT @ kmax=1500 | UNSAT @ kmax=1500 | YES |
+| ...and 11 more | | all matching | YES |
 
 This required making the machine model faithful to the C reference:
 zero-initialized segments and registers, page-aligned heap, full 4 GB stack

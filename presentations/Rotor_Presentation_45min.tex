@@ -572,39 +572,41 @@ b23
 \end{frame}
 
 % ---------------------------------------------------------
-\begin{frame}{Results: Same Property, Same Step --- Benchmark by Benchmark}
-  %% TODO before the talk: fill in the remaining rows from
-  %% benchmarks/deep_equivalence_results.csv when the harness completes.
+\begin{frame}{Results: 18 / 18 --- Same Property, Same Step, Every Benchmark}
   \begin{center}
-  \footnotesize
-  \begin{tabular}{lllc}
+  \scriptsize
+  \begin{tabular}{lllp{4.6cm}c}
     \toprule
-    Benchmark & C rotor & Rust rotor & match\\
+    Benchmark & both report & $k$ & Benchmark (both report @ $k$) & \\
     \midrule
-    division-by-zero & division-by-zero @ 76 & division-by-zero @ 76 &
-      \cellcolor{green!20}\checkmark\\
-    invalid-memory-access & store-invalid-addr @ 79 &
-      store-invalid-addr @ 79 & \cellcolor{green!20}\checkmark\\
-    memory-access-fail & load-seg-fault @ 66 & load-seg-fault @ 66 &
-      \cellcolor{green!20}\checkmark\\
-    nested-if-else & bad-exit-code @ 100 & bad-exit-code @ 100 &
-      \cellcolor{green!20}\checkmark\\
-    nested-if-else-rev & bad-exit-code @ 103 & bad-exit-code @ 103 &
-      \cellcolor{green!20}\checkmark\\
-    nested-recursion-fail & UNSAT @ 1500 & UNSAT @ 1500 &
-      \cellcolor{green!20}\checkmark\\
-    recursive-ackermann & bad-exit-code @ 152 & bad-exit-code @ 152 &
-      \cellcolor{green!20}\checkmark\\
-    recursive-factorial & bad-exit-code @ 119 & bad-exit-code @ 119 &
-      \cellcolor{green!20}\checkmark\\
-    recursive-fibonacci & bad-exit-code @ 118 & bad-exit-code @ 118 &
-      \cellcolor{green!20}\checkmark\\
+    division-by-zero & division-by-zero & 76 &
+      simple-assignment @ 96 & \cellcolor{green!20}\checkmark\\
+    invalid-memory-access & store-invalid-addr & 79 &
+      simple-decreasing-loop @ 99 & \cellcolor{green!20}\checkmark\\
+    memory-access-fail & load-seg-fault & 66 &
+      simple-if-else @ 108 & \cellcolor{green!20}\checkmark\\
+    nested-if-else & bad-exit-code & 100 &
+      simple-if-else-reverse @ 108 & \cellcolor{green!20}\checkmark\\
+    nested-if-else-rev & bad-exit-code & 103 &
+      simple-if-without-else @ 101 & \cellcolor{green!20}\checkmark\\
+    recursive-ackermann & bad-exit-code & 152 &
+      simple-increasing-loop @ 93 & \cellcolor{green!20}\checkmark\\
+    recursive-factorial & bad-exit-code & 119 &
+      three-level-nested-loop @ 103 & \cellcolor{green!20}\checkmark\\
+    recursive-fibonacci & bad-exit-code & 118 &
+      two-level-nested-loop @ 99 & \cellcolor{green!20}\checkmark\\
+    nested-recursion-fail & UNSAT & 1500 &
+      return-from-loop: UNSAT @ 1500 & \cellcolor{green!20}\checkmark\\
     \bottomrule
   \end{tabular}
   \end{center}
   \vspace{0.1cm}
-  {\footnotesize Five property types; recursion matched step-exactly.
-  Reproducible: \texttt{run\_deep\_equivalence.ps1}, kmax = 1500.}
+  \begin{block}{Final score: 18 / 18 benchmarks --- zero divergences}
+    Five property types; recursion matched step-exactly. Bonus finding: the
+    one apparent divergence was a bug in our own \emph{measurement harness}
+    (a crashed solver container recorded as UNSAT) --- caught because one
+    anomaly against 17 matches demanded investigation.
+  \end{block}
 \end{frame}
 
 % =========================
