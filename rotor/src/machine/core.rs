@@ -139,25 +139,10 @@ impl CoreState {
             Some("set initial SP".to_string()),
         );
 
-        // Set a0 = argc only in symbolic-argv mode (our extension). The C
-        // reference does NOT initialize a0 — programs read argc from the stack.
-        let reg_init_val = if config.symbolic_argv && config.symbolic_argc > 0 {
-            let argc_val = builder.constd(
-                sorts.sid_machine_word,
-                (config.symbolic_argc + 1) as u64,
-                Some(format!("argc = {}", config.symbolic_argc + 1)),
-            );
-            let a0_addr = consts.nid_register(crate::riscv::isa::regs::A0);
-            builder.write(
-                sorts.sid_register_state,
-                reg_with_sp,
-                a0_addr,
-                argc_val,
-                Some("set a0 = argc".to_string()),
-            )
-        } else {
-            reg_with_sp
-        };
+        // Only SP is initialized, like the C reference. argc is read from the
+        // stack ([SP]) by the program's startup code — an a0 write would be a
+        // dead store (selfie-compiled programs never read argc from a0).
+        let reg_init_val = reg_with_sp;
 
         // ================================================================
         // Phase 2: Create real states and init them.
@@ -491,6 +476,18 @@ impl CoreState {
                         sorts.sid_byte,
                         &format!("argv[{}][{}]", arg_idx + 1, byte_idx),
                         Some(format!("symbolic byte argv[{}][{}]", arg_idx + 1, byte_idx)),
+                    );
+                    // Freeze the symbolic byte (next = self), like the C
+                    // reference does for its input buffer: a state without a
+                    // next could be re-chosen by the solver at every step.
+                    // The value only matters at step 0 (it is baked into the
+                    // stack init), but freezing it keeps witnesses readable
+                    // and the intent explicit.
+                    builder.next(
+                        sorts.sid_byte,
+                        sym_byte,
+                        sym_byte,
+                        Some("read-only symbolic argv byte".to_string()),
                     );
                     current = builder.write(sorts.sid_stack_state, current, addr, sym_byte, None);
                     str_addr += 1;
