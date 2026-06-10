@@ -243,18 +243,20 @@
 
 % ---------------------------------------------------------
 \begin{frame}{The Selfie Challenge: ``Just Model All of Selfie''}
-  Input: selfie self-compiled to RISC-U --- \textbf{43\,406
-  instructions}, the largest natural benchmark.
+  Input: pre-compiled selfie.m --- \textbf{43\,406 instructions};
+  both rotors timed on the binary only (re-measured 2026-06-10).
   \vspace{0.1cm}
   \begin{center}
   \begin{tabular}{lrrr}
     \toprule
     Metric & C rotor & Rust rotor & ratio\\
     \midrule
-    model generation time & 106\,s & \textbf{47\,ms} &
-      $\sim$2\,250$\times$\\
-    peak memory           & 431\,MB & \textbf{20\,MB} &
+    model generation time & 139\,s & \textbf{$\sim$0.1\,s} &
+      $\sim$1\,400$\times$\\
+    peak memory           & 428\,MB & \textbf{20\,MB} &
       $\sim$21$\times$\\
+    formula lines created & 3\,165\,611 & \textbf{$\sim$111\,k} &
+      28$\times$\\
     output size           & 10.6\,MB & \textbf{3.1\,MB} &
       3.4$\times$\\
     validated by btormc   & --- & \checkmark & \\
