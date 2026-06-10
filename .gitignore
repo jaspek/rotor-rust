@@ -69,3 +69,4 @@ benchmarks/output*
 
 # --- Local-only experimental subproject (not part of the main deliverable) --
 agent-bitr/
+presentations/_build*/
