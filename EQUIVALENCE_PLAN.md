@@ -30,7 +30,16 @@ byte-0). Verified: catbtor + btormc -kmax 0 pass. Necessary, not sufficient.
 
 ---
 
-## P-FOUNDATION — Segment boundaries (must come before P1) ❌
+## P-FOUNDATION — Segment boundaries (must come before P1) ✅ DONE
+
+Verified against the C reference (division-by-zero benchmark):
+heap start 0x12000 (page-aligned) ✓ · heap end 0x12800 ✓ · stack
+[0xFFFFF800, 2^32) ✓ · brk init = heap start ✓ · SP = 0xFFFFFFF8 ✓ ·
+wrap-aware checks implemented · catbtor + btormc load PASS · symbolic-argv
+regression PASS. Deep run still fires the spurious load (expected — root
+causes are P0.3 + P1, below).
+
+### Original spec (for reference)
 
 Our segments do not match C. Until they do, no address property can match.
 

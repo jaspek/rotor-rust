@@ -85,17 +85,13 @@ impl CoreState {
         );
 
         // --- Segmentation constants (needed for SP calculation) ---
-        let segmentation = Segmentation::new(
-            builder,
-            sorts,
-            consts,
-            binary,
-            config.heap_allowance,
-            config.stack_allowance,
-        );
+        let segmentation = Segmentation::new(builder, sorts, consts, binary, config);
 
         // --- Stack init value (symbolic argv writes on a base input/state) ---
-        let vaddr_top = 1u64 << (config.virtual_address_space - 1);
+        // Stack occupies the TOP of the full virtual address space
+        // (2^vaddr_bits, e.g. 4 GB for the default 32-bit space), matching
+        // the C reference: stack @ [0xFFFFF800, 0x100000000).
+        let vaddr_top = segmentation.stack_end_val;
 
         let (initial_sp, stack_init_val) = if config.symbolic_argv && config.symbolic_argc > 0 {
             Self::initialize_symbolic_argv(builder, sorts, config, vaddr_top, word_size)
@@ -258,7 +254,10 @@ impl CoreState {
         );
 
         // --- Kernel state ---
-        let initial_brk = binary.data_start + binary.data_size;
+        // Program break starts at the (page-aligned) start of the heap
+        // segment, matching the C reference ("initializing program break to
+        // start of heap segment").
+        let initial_brk = segmentation.heap_start_val;
         let kernel = KernelState::new(builder, sorts, consts, initial_brk, config.bytes_to_read);
 
         CoreState {
