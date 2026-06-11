@@ -9,14 +9,21 @@ Status legend: ✅ done+verified · 🔧 in progress · ❌ not started
 
 ---
 
-# 🏁 CAMPAIGN COMPLETE (2026-06-10): 18/18 BENCHMARKS EQUIVALENT
+# 🏁 CAMPAIGN COMPLETE (2026-06-10/11): 36/36 PAIRED VERDICTS, TWO CONFIGURATIONS
 
 Every step below is done and verified. Final result: on all 18 standard
 benchmarks, btormc reports the same bad-state property at the same least
-bound k from both rotors' models at kmax=1500 (16 SAT rows, 2 agreed-UNSAT
-rows). Full table and methodology: `P2_RESULTS.md` /
-`benchmarks/deep_equivalence_results.csv`. The section below documents the
-historical starting point.
+bound k from both rotors' models at kmax=1500 — under target exit code 0
+(16 SAT + 2 agreed-UNSAT) AND target exit code 1 (8 SAT + 10 agreed-UNSAT,
+including a benchmark that flips SAT/UNSAT between configurations,
+identically in both rotors). Full tables and methodology: `P2_RESULTS.md`,
+`benchmarks/deep_equivalence_results.csv`, `deep_equivalence_results_exit1.csv`.
+
+Follow-up round (2026-06-11 meeting): performance difference explained by
+counter profiling in both tools (`PROFILING_RESULTS.md`), complete crash
+report for the C rotor's reuse_lines=0 abort delivered (`CRASH_REPORT.md`),
+comment-stripped size comparison measured (C: 50.8% comments). The section
+below documents the historical starting point.
 
 ---
 
