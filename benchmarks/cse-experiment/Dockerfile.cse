@@ -1,0 +1,29 @@
+# C rotor CSE-off experiment (the professor's suggestion: disable the
+# duplicate check and "see if the universe ends"). Builds two C rotors,
+# one with reuse_lines defaulting to 1, one forced to 0, runs both on
+# selfie.c, and reports model sizes + generation time.
+
+FROM ubuntu:24.04
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc libc6-dev make git time ca-certificates && rm -rf /var/lib/apt/lists/*
+
+ARG SELFIE_REPO=https://github.com/cksystemsteaching/selfie.git
+RUN git clone --depth 1 ${SELFIE_REPO} /selfie
+WORKDIR /selfie
+
+# Baseline C rotor (reuse_lines = 1)
+RUN make selfie && make rotor && cp rotor /rotor-cse-on
+
+# CSE-OFF C rotor: force the global reuse_lines initializer to 0
+RUN sed -i 's/^uint64_t reuse_lines = 1;/uint64_t reuse_lines = 0;/' tools/rotor.c \
+ && make rotor && cp rotor /rotor-cse-off
+
+RUN mkdir -p /out \
+ && echo "=== C rotor CSE ON ===" \
+ && /usr/bin/time -v /rotor-cse-on  -m64 -c selfie.c - 0 > /out/c-cse-on.log  2>/out/c-cse-on.time  ; \
+    echo "=== C rotor CSE OFF ===" \
+ && /usr/bin/time -v /rotor-cse-off -m64 -c selfie.c - 0 > /out/c-cse-off.log 2>/out/c-cse-off.time ; \
+    for f in /selfie/*-rotorized.btor2; do echo "generated: $f $(wc -l < $f) lines $(wc -c < $f) bytes"; done > /out/c-cse-sizes.txt 2>&1 ; \
+    true
+
+CMD ["bash","-lc","echo '== CSE ON time/mem =='; grep -E 'Elapsed|Maximum resident' /out/c-cse-on.time; echo '== CSE OFF time/mem =='; grep -E 'Elapsed|Maximum resident' /out/c-cse-off.time; echo '== sizes =='; cat /out/c-cse-sizes.txt; echo '== model formulae line counts =='; grep -E 'lines of model formulae' /out/c-cse-on.log /out/c-cse-off.log"]
