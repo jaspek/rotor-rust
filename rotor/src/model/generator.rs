@@ -64,6 +64,12 @@ pub fn model_rotor(
     let printer = Btor2Printer::new(config.print_comments);
     printer.print(&builder, &mut *output)?;
 
+    log::info!(
+        "PROFILE: {} subexpression lookups, {} hits (reused), {} unique nodes",
+        builder.profile_lookups,
+        builder.profile_hits,
+        builder.node_count()
+    );
     log::info!("Done.");
     Ok(())
 }

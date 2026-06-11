@@ -8,6 +8,13 @@ pub struct Btor2Builder {
     dedup: HashMap<Op, NodeId>,
     next_index: u32,
     enable_cse: bool,
+    /// Profiling counters for the dedup question "is this subexpression
+    /// already in the system?" — counted to compare against the C rotor's
+    /// find_equal_line statistics (same methodology: count invocations and
+    /// hits in both tools; the ballparks must match if the sharing is the
+    /// same, and only the cost per question may differ).
+    pub profile_lookups: u64,
+    pub profile_hits: u64,
 }
 
 impl Default for Btor2Builder {
@@ -23,6 +30,8 @@ impl Btor2Builder {
             dedup: HashMap::new(),
             next_index: 1,
             enable_cse: true,
+            profile_lookups: 0,
+            profile_hits: 0,
         }
     }
 
@@ -33,9 +42,11 @@ impl Btor2Builder {
     }
 
     fn intern(&mut self, op: Op, comment: Option<String>) -> NodeId {
+        self.profile_lookups += 1;
         #[allow(clippy::collapsible_if)]
         if self.enable_cse {
             if let Some(&existing) = self.dedup.get(&op) {
+                self.profile_hits += 1;
                 return existing;
             }
         }

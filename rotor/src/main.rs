@@ -88,6 +88,10 @@ struct Cli {
     #[arg(long, default_value_t = true)]
     comments: bool,
 
+    /// Strip all comments from the BTOR2 output (C rotor's -nocomments)
+    #[arg(long)]
+    no_comments: bool,
+
     /// Enable symbolic command-line arguments (argv)
     #[arg(long)]
     symbolic_argv: bool,
@@ -144,7 +148,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         check_invalid_addresses: cli.check_invalid_addresses,
         check_seg_faults: cli.check_seg_faults,
         target_exit_code: cli.exit_code,
-        print_comments: cli.comments,
+        print_comments: cli.comments && !cli.no_comments,
         propagate_constants: true,
         enable_cse: !cli.no_cse,
     };
