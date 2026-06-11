@@ -96,6 +96,24 @@ fires bad-exit-code @ 103, identical to Rust. The runner now distinguishes
 "btormc completed, nothing reachable" from "no output" (recorded as ERROR),
 and all UNSAT rows were re-verified with completion evidence.
 
+## Part 3 — Second configuration: target exit code 1 (paper's planted bugs)
+
+The rotor paper's experiments hunt "non-zero exit code" bad states. We
+re-ran the entire suite with both rotors at target exit code 1 (C:
+`rotor -m64 -c <prog>.c - 1`; Rust: `--exit-code 1`), all other parameters
+unchanged. Result: **18/18 again** (deep_equivalence_results_exit1.csv).
+
+| Group | Benchmarks | Both rotors report |
+|---|---|---|
+| exit-independent properties | division-by-zero, invalid-memory-access, memory-access-fail | identical to the exit-0 run (b7@76, b10@79, b14@66) — these fire before any exit |
+| planted exit(1) bugs reachable | return-from-loop @ 95, simple-assignment @ 91, simple-if-else @ 107, simple-if-else-reverse @ 105, simple-if-without-else @ 106 | same property, same k |
+| not reachable at kmax=1500 | the remaining 10 | both UNSAT@1500 |
+
+Notably return-from-loop FLIPS between configurations (UNSAT under target 0,
+SAT@95 under target 1) and both rotors flip identically — the equivalence is
+not an artifact of one parameter choice. Combined evidence: 36 paired
+verdicts across two configurations, zero divergences.
+
 ## Reproducers
 
 ```powershell
