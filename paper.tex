@@ -16,13 +16,13 @@
   keepspaces=true,
 }
 
-\title{Rotor in Rust: A BTOR2 Model Generator for RISC-V with Symbolic Inputs and Interactive Model Visualization}
+\title{Rotor in Rust: Fast Generation of RISC-V Machine Models\\
+       with Symbolic Console Arguments}
 
 \author{
-\IEEEauthorblockN{Jasmin Begic, Daniel Wassie}
-\IEEEauthorblockA{Advanced Systems Engineering (ASE2026)\\
-Paris Lodron University of Salzburg\\
-Salzburg, Austria}
+\IEEEauthorblockN{Jasmin Begi\'{c}, Daniel Wassie}
+\IEEEauthorblockA{Advanced Systems Engineering (ASE 2026), supervised by Christoph M.\ Kirsch\\
+Paris Lodron University of Salzburg, Austria}
 }
 
 \begin{document}
@@ -30,223 +30,760 @@ Salzburg, Austria}
 \maketitle
 
 \begin{abstract}
-This paper presents a Rust reimplementation of Rotor, the BTOR2 model generator from the Selfie project, together with two extensions: symbolic argv modeling for input-dependent program verification, and an interactive web-based BTOR2 visualizer with witness trace animation. The Rust rewrite produces models 3.5$\times$ smaller than the reference C implementation while preserving semantic equivalence verified through btormc bounded model checking. The visualizer supports hierarchical and force-directed layouts, cone-of-influence subgraphs, depth-limited exploration, node collapse and category clumping, and step-by-step playback of counterexample witness traces. We describe the architecture of all three components, compare model output against the reference implementation, and report verification results across 18 benchmark programs.
+Rotor generates bit-precise BTOR2 machine models of RISC-V binaries for
+bounded model checking. We present a reimplementation of rotor in Rust
+that generates the model of selfie's 43k-instruction self-compilation in
+0.1 seconds and 20\,MB of memory, where the reference C implementation
+requires 139 seconds and 428\,MB --- without doing less work:
+counter-based profiling of the subexpression-sharing question in both
+tools shows that the difference is one hash probe versus an average of
+1.17 million linked-list comparisons per question, 11.7 billion
+comparisons in total.
+We further extend the generated models with \emph{symbolic console
+arguments}, an item the original rotor paper lists as future work: the
+bytes of \texttt{argv} are left as uninitialized model states inside an
+otherwise concrete process-start stack image, letting the model checker
+search over everything a user could type on the command line. On five
+test programs whose planted bugs are unreachable through standard input,
+the model checker recovers the exact triggering argument bytes within
+seconds.
+Because a rewrite of a verification tool must itself be validated, we
+introduce a differential-testing harness that demands, for every
+benchmark, that the same bad-state property becomes satisfiable at the
+same minimal bound from both rotors' models. Across the 18 standard
+selfie benchmarks under two property configurations --- 36 paired
+verdicts --- the two generators are indistinguishable to the model
+checker. The harness also exposed a crash in the reference
+implementation and, once, a bug in our own measurement infrastructure.
+Finally, an interactive browser-based visualizer replays counterexample
+witnesses step by step, completing the pipeline from binary to
+human-readable verification result.
 \end{abstract}
 
 \begin{IEEEkeywords}
-BTOR2, bounded model checking, RISC-V, formal verification, Rust, symbolic execution, model visualization, witness traces
+bounded model checking, BTOR2, RISC-V, symbolic execution, differential
+testing, Rust
 \end{IEEEkeywords}
-
-\bigskip
-\noindent\fbox{\parbox{0.95\columnwidth}{
-\textbf{PROJECT CONTEXT}\\[2pt]
-\begin{tabular}{@{}ll@{}}
-Supervisor: & Univ.-Prof. Dipl.-Inform. Dr.-Ing. Christoph Kirsch \\
-Course: & ASE2026 (Advanced Systems Engineering) \\
-University: & Paris Lodron University of Salzburg \\
-Date: & 2026-03-31 \\
-Repository: & \texttt{github.com/jaspek/rotor-rust} \\
-\end{tabular}
-}}
 
 \section{Introduction}
 
-Rotor is the BTOR2 model generator of the Selfie project~\cite{selfie}, translating RISC-V ELF binaries into transition systems suitable for bounded model checking. The original implementation in C generates correct models but suffers from linear-time common subexpression elimination and a monolithic code structure that limits extensibility.
+Bounded model checking (BMC)~\cite{biere1999} decides whether a system
+can reach a bad state within a fixed number of execution steps --- for
+\emph{any} input. Applied to software at the machine-code level, BMC
+offers an attractive guarantee: what is verified is the binary that
+actually runs, not a source-level abstraction of it. The rotor
+tool~\cite{rotorpaper}, part of the selfie project~\cite{selfie}, makes
+this workflow concrete: it translates a RISC-V~\cite{riscv} binary into
+a BTOR2~\cite{btor2} model --- a bit-precise description of a machine
+executing that binary --- which bounded model checkers such as
+\texttt{btormc} check against safety properties like division by zero,
+segmentation faults, and reaching a target exit code.
 
-This project makes three contributions. First, we rewrite Rotor in Rust with $O(1)$ HashMap-based CSE, arena allocation, and a modular architecture separating BTOR2 IR construction, RISC-V decoding, machine state modeling, and property generation. Second, we extend the tool with symbolic argv support, allowing verification of programs whose behavior depends on command-line input. Third, we build an interactive web-based BTOR2 visualizer with features inspired by Diller~\cite{diller}, including witness trace animation, subgraph views, and node clumping.
+In practice, three obstacles limit who can use this pipeline, what bugs
+it can find, and what a user can do with the answer.
 
-All three components are integrated in a single repository with a CI pipeline that builds the Rust code, lints the visualizer, and verifies BTOR2 model well-formedness on every commit.
+First, the reference rotor is a single 14{,}000-line
+C\textsuperscript{*} file. Beyond the engineering cost of extending it,
+it is slow on large inputs: generating the model of selfie's
+self-compilation takes over two minutes and hundreds of megabytes of
+memory, which makes regenerate-after-every-change workflows impractical.
+
+Second, the generated models expose only one input surface to the model
+checker: bytes read from standard input. Programs also receive input
+through \emph{console arguments}, and bugs that depend on a specific
+argument are structurally invisible --- the model fixes the argument
+bytes, so no solver, however powerful, may explore them. The rotor paper
+itself names ``console arguments as symbolic input'' as future
+work~\cite{rotorpaper}.
+
+Third, when the model checker does find a counterexample, its witness is
+a flat list of binary-encoded assignments keyed to internal node numbers
+--- sound, complete, and unreadable for anyone who did not build the
+tool.
+
+This paper addresses all three obstacles. We reimplement rotor as a
+modular Rust crate; we extend the machine models with symbolic console
+arguments; and we provide an interactive visualizer for witnesses. A
+rewrite of a verification tool, however, raises an obligation that
+ordinary software does not: the new tool's claim to correctness must
+itself be checkable. We therefore make the validation methodology a
+contribution in its own right: a differential-testing harness that
+treats the model checker as an impartial referee between the two
+generators, with a criterion strict enough that every modeling defect we
+introduced during development was caught by it.
+
+\medskip
+\noindent\textbf{Contributions.} To summarise:
+\begin{itemize}
+  \item A modular Rust reimplementation of rotor that emits the same 24
+        bad-state properties as the reference, generates models three
+        orders of magnitude faster in $21\times$ less memory, and
+        supports the full pipeline from ELF binary to BTOR2 model
+        (Section~\ref{sec:rust}).
+  \item Symbolic console arguments: \texttt{argv} content bytes become
+        uninitialized model states inside an otherwise concrete
+        process-start stack image, conservatively extending the machine
+        input of the original models (Section~\ref{sec:argv}).
+  \item A differential-validation methodology and harness: same
+        bad-state property at the same minimal bound, demanded across
+        the full benchmark suite under multiple configurations; 36/36
+        paired verdicts agree (Section~\ref{sec:validation}).
+  \item A counter-based performance analysis, following classical
+        profiling methodology, that fully attributes the performance
+        difference between the two generators and uncovers an
+        architectural difference in \emph{when} each tool deduplicates
+        (Section~\ref{sec:performance}).
+  \item An interactive, browser-based witness visualizer
+        (Section~\ref{sec:visualizer}).
+\end{itemize}
+
+\noindent\textbf{Artifacts.} All artifacts are public: the Rust
+implementation, the validation harness with both result tables, the C
+reference models with their generation commands recorded in file
+headers, a reproducible Docker setup for the model checker and for the
+crash described in Section~\ref{sec:cse}, and the visualizer with
+twelve preloaded examples:
+\begin{center}
+\footnotesize
+\url{https://github.com/jaspek/rotor-rust}\\
+\url{https://jaspek.github.io/rotor-rust/}
+\end{center}
 
 \section{Background}
+\label{sec:background}
 
-\subsection{BTOR2 Format}
+\subsection{Rotor models}
 
-BTOR2~\cite{btor2} is a word-level format for hardware-like transition systems. Each line declares a node identified by a positive integer (nid). Nodes represent sorts (bitvector, array), constants, operators, states with init/next functions, inputs, and safety properties (bad states). A bounded model checker such as btormc~\cite{btor2tools} unrolls the transition relation for $k$ steps and queries an SMT solver for reachability of bad states.
+A rotor-generated BTOR2 model describes a RISC-V machine as a transition
+system: \emph{states} (program counter, 32 general-purpose registers,
+byte- or word-addressed arrays for the code, data, heap, and stack
+segments, and kernel state such as the program break and input
+counters), \emph{transition functions} giving each state's next value as
+a function of the current state --- the semantics of every instruction
+the binary contains --- and \emph{bad-state properties}, boolean
+formulas over the state that encode safety violations. The reference
+emits 24 properties, among them division by zero, signed division
+overflow, illegal and unknown instructions, fetch/load/store address
+validity and segmentation faults, stack-pointer validity, unknown
+system calls, argument faults of the modeled system calls, and reaching
+a configurable target exit code.
 
-\subsection{Rotor and the Selfie Project}
+Machine input enters the model through \emph{uninitialized} states:
+BTOR2 states without an \texttt{init} assignment may take any value of
+their sort in the initial state, so the model checker quantifies over
+them. The reference models a bounded standard-input buffer this way. A
+bounded model checker unrolls the transition system and asks, for
+increasing $k$, whether some assignment of the uninitialized states
+reaches a bad state within $k$ steps; \texttt{btormc} reports the
+property index and the minimal such $k$, together with a witness.
 
-The Selfie project~\cite{selfie} provides a self-contained educational RISC-V toolchain: compiler, emulator, and formal verification tools. Rotor generates BTOR2 models from RISC-V binaries compiled by Selfie, encoding the processor state (PC, registers, segmented memory) and kernel syscall behavior as a transition system with safety properties for exit codes, division by zero, and segmentation faults.
+\subsection{A worked example}
+\label{sec:worked}
 
-\subsection{Witness Traces}
+Consider \texttt{division-by-zero-3-35.c} from the benchmark suite. The
+program allocates one machine word on the heap, reads one byte of input
+into it, subtracts 48, and divides a constant by the result --- so the
+input byte \texttt{'0'} (ASCII 48) makes the divisor zero. Rotor
+compiles nothing and executes nothing; it emits a model whose initial
+state is the loaded binary with the boot stack image, whose transition
+functions encode selfie's startup code, the \texttt{malloc}/\texttt{brk}
+round trip, the stalling \texttt{read}, and the arithmetic, and whose
+property b7 is
+\begin{lstlisting}
+40901 eq 1 20055 50 ; actual exit code ==
+                    ; bad exit code?
+\end{lstlisting}
+\noindent style boolean logic over the state (here shown for the exit
+property; the division property guards the divisor of every division
+instruction in the binary). Running \texttt{btormc} on the model yields
+\begin{lstlisting}
+[btor>mc] bad state property 7 reachable
+          at bound k = 76 SATISFIABLE
+\end{lstlisting}
+\noindent meaning: of all 256 possible input bytes, at least one ---
+the witness shows \texttt{0x30} $=$ \texttt{'0'} --- drives the machine
+into the division-by-zero bad state, and the earliest this can happen
+is after exactly 76 machine transitions, counting every startup
+instruction, the system-call round trips, and the byte delivery of the
+stalling \texttt{read}. This pair, (property index, minimal bound), is
+the unit of comparison throughout this paper.
 
-When btormc finds a reachable bad state, it produces a witness trace: a sequence of state and input assignments at each time step that drives the system from its initial state to the property violation. The trace format uses binary-encoded bitvector values indexed by state and input declaration order.
+\subsection{The benchmark suite}
 
-\section{Part 1: Rotor in Rust}
+The rotor paper's experiments use 18 small C\textsuperscript{*} programs
+(selfie's \texttt{examples/symbolic}), each reading one byte of input,
+with planted bugs that fire between 66 and 1438 unrolling
+steps~\cite{rotorpaper}. We adopt the same suite, the same single input
+byte, and the same machine configuration (64-bit words, 32-bit virtual
+address space, 2048-byte heap and stack allowances) throughout.
+
+\section{Rotor in Rust}
+\label{sec:rust}
 
 \subsection{Architecture}
 
-The Rust implementation is organized into four modules totaling 6,839 lines across 25 source files:
+The reimplementation is a Rust crate organised by concern: a BTOR2
+\emph{builder} (typed node graph, hash-consing, printing), a
+\emph{machine} layer (sorts, register file, segmented memory, kernel
+state), a RISC-V \emph{decoder} (RV64/RV32 base, M and C extensions,
+ELF loading), and a \emph{model} layer (per-instruction data flow,
+sequential next-state logic, the 24 properties). Each BTOR2 node is a
+value of a typed \texttt{enum}; structurally equal nodes are interned
+through a hash map at creation:
 
-\textbf{btor2/} (1,388 lines) --- BTOR2 IR builder with HashMap-based common subexpression elimination, node types (Op enum with 30+ variants), sort definitions, and a topological-order printer.
+\begin{lstlisting}
+fn intern(&mut self, op: Op, ...) -> NodeId {
+  self.profile_lookups += 1;
+  if self.enable_cse {
+    if let Some(&id) = self.dedup.get(&op) {
+      self.profile_hits += 1;
+      return id;          // duplicate: never allocated
+    }
+  }
+  let id = self.alloc_id();
+  self.nodes.push(Node { id, op: op.clone(), .. });
+  if self.enable_cse { self.dedup.insert(op, id); }
+  id
+}
+\end{lstlisting}
 
-\textbf{riscv/} (1,839 lines) --- RV32I/RV64I instruction decode, M extension (multiply/divide), C extension (compressed instructions), ELF loading via the \texttt{goblin} crate, and ISA constant definitions.
+\noindent Because the probe precedes allocation, a duplicate or dead
+node is never created. This single data-structure decision dominates
+the performance comparison in Section~\ref{sec:performance}; the
+\texttt{profile\_*} counters appear in
+Section~\ref{sec:performance} as well. The same builder serves a
+\texttt{--no-cse} mode (Section~\ref{sec:cse}) and a comment-stripping
+mode mirroring the reference's \texttt{-nocomments}, both used in the
+evaluation.
 
-\textbf{machine/} (2,027 lines) --- Machine sorts and constants, register file model, segmented memory (code, data, heap, stack), kernel state for syscall modeling (\texttt{exit}, \texttt{read}, \texttt{write}, \texttt{openat}, \texttt{brk}), and per-core state composition.
+\subsection{Faithfulness requirements}
+\label{sec:faithful}
 
-\textbf{model/} (1,339 lines) --- Combinational logic generation (fetch, decode, ALU, control flow), sequential logic (next-state for PC, registers, memory), safety property generation, and the top-level pipeline orchestrator.
+Emitting the same properties is not sufficient for two generators to
+agree; the modeled \emph{machines} must be identical. Differential
+validation (Section~\ref{sec:validation}) forced us to reproduce, item
+by item, semantics that are easy to get subtly wrong:
 
-\subsection{Key Design Decisions}
+\begin{itemize}
+  \item \emph{Deterministic initial memory.} All segment arrays and the
+        register file are zero-initialized before the binary image is
+        written. An uninitialized array would let the solver invent
+        memory contents and produce spurious counterexamples.
+  \item \emph{Exact segment geometry.} The heap begins at the first
+        page-aligned address after the data segment; the stack occupies
+        $[2^{32}{-}\textit{allowance},\,2^{32})$ with its end wrapped to
+        zero in the 32-bit virtual address sort, requiring wrap-aware
+        bounds checks; the program break starts at the heap start.
+  \item \emph{Process-start stack image.} The stack is initialized with
+        a concrete \texttt{argc}/\texttt{argv} image --- argument count,
+        pointer array, terminating null pointers, and the program-name
+        string --- exactly as selfie's boot loader writes it.
+  \item \emph{System-call semantics.} The \texttt{read} system call
+        delivers \emph{one input byte per machine transition} with the
+        program counter stalled until the read completes; \texttt{exit}
+        stalls the machine forever; \texttt{brk} validates the requested
+        break against the heap segment; \texttt{openat} maintains a
+        file-descriptor counter.
+  \item \emph{Property emission order.} The 24 properties are emitted in
+        the reference's exact order, so that \texttt{btormc} property
+        \emph{indices} are comparable across both models.
+\end{itemize}
 
-\textbf{HashMap CSE.} The C implementation uses linear scans to detect duplicate subexpressions. The Rust version hashes each node's operator and operands, achieving $O(1)$ amortized lookup. This eliminates redundant node creation across all builder call sites.
+Each property body was ported from the reference source rather than
+re-derived, and the porting process itself illustrates why this
+discipline matters. Three of our initial, plausible-looking
+formulations differed from the reference. We had assumed the
+break-validity check requires the new program break to be at least the
+current one; the reference checks only the upper bound, so that
+\texttt{brk(0)} address queries --- which selfie's startup performs ---
+are valid, and our version fired a spurious fault at bound 5. We had
+checked the \texttt{openat} filename as a single address; the reference
+checks the full range $[\mathit{a1}, \mathit{a1}+127]$ against the heap
+segment. And we had checked the \texttt{read} buffer on every
+transition of an ongoing read; the reference checks it once, when the
+read starts. All three differences were exposed by the validation
+harness (Section~\ref{sec:validation}) before they could do harm ---
+and none of them would have been caught by reviewing the properties'
+names or by comparing model sizes.
 
-\textbf{Arena allocation.} All BTOR2 nodes are stored in a contiguous \texttt{Vec}, with \texttt{NodeId} indices providing stable references. This yields cache-friendly traversal and avoids reference-counting overhead.
+Property emission order matters for a subtle practical reason: before
+we aligned it, both rotors agreed that division-by-zero is reachable at
+bound 76 on the worked example, but reported it as property b1 versus
+b7 --- the same property under different indices. Aligning the order
+makes the model checker's raw output directly comparable, with no
+mapping layer that could itself harbor bugs.
 
-\textbf{Direct initialization.} Unlike the C version, which uses phased initialization (zeroed states followed by loaded states over multiple time steps), the Rust version encodes binary data directly in \texttt{init} statements. This produces more compact models but requires more unrolling steps for the solver.
+\section{Symbolic Console Arguments}
+\label{sec:argv}
 
-\subsection{Model Comparison}
+\subsection{Mechanism}
 
-Table~\ref{tab:comparison} compares the BTOR2 output for the division-by-zero benchmark across both implementations.
+At process start, the operating system writes the argument strings, an
+array of pointers to them, and the argument count onto the stack. With
+\texttt{--symbolic-argv}, our generator builds exactly this layout, but
+emits the \emph{content bytes} of \texttt{argv[1..N]} as uninitialized
+one-byte states --- the same formal device the reference already uses
+for standard input. Everything else remains concrete: \texttt{argc},
+all pointers, the terminating null bytes of each string, and
+\texttt{argv[0]}. The modeled program reads its arguments through
+ordinary loads; the decoder, memory model, and properties are untouched.
+Soundness is inherited from the underlying framework: a witness
+assignment of the argument bytes corresponds to a real command line,
+and conversely every command line within the configured bounds is an
+admissible assignment.
 
-\begin{table}[h]
+The stack image, from the top of memory downward, consists of the
+string area (for each symbolic argument, \texttt{max\_arglen} symbolic
+bytes followed by a concrete null terminator; \texttt{argv[0]} is the
+concrete program name), the pointer area (\texttt{argv[0..N]} addresses
+followed by a null pointer), and \texttt{argc} at the initial stack
+pointer --- the standard process-start convention. The symbolic bytes
+are additionally frozen with a self-loop \texttt{next}, mirroring how
+the reference freezes its input buffer: a state without a \texttt{next}
+may be re-chosen by the solver at every step, whereas a command-line
+argument is fixed once at process start.
+
+Three design choices keep the model finite and static. \emph{(i)}~The
+argument count is fixed at generation time
+(\texttt{--num-symbolic-args}); the solver explores argument
+\emph{content}, not count. \emph{(ii)}~Each argument occupies a
+fixed-size slot of \texttt{--max-arglen} bytes plus a concrete
+terminator, bounding input like the reference bounds its input buffer.
+\emph{(iii)}~Interior zero bytes are permitted and correspond to shorter
+real-world strings. The fixed-slot layout differs from the packed layout
+of a real \texttt{execve} only for programs that walk pointers past a
+string terminator; for programs treating arguments as C strings the two
+are indistinguishable.
+
+\subsection{Validation programs}
+\label{sec:argvtests}
+
+We wrote five C\textsuperscript{*} programs whose planted bugs depend
+only on console arguments; none reads standard input, so none of these
+bugs is expressible in the original models at all
+(Table~\ref{tab:argv}).
+
+\begin{table}[t]
+\caption{Argv test programs. The bug (\texttt{return 1}) fires iff the
+condition holds; the model checker must synthesise the bytes.}
+\label{tab:argv}
 \centering
-\caption{Model comparison for division-by-zero-3-35}
-\label{tab:comparison}
+\footnotesize
 \begin{tabular}{lll}
 \toprule
-\textbf{Aspect} & \textbf{C Rotor} & \textbf{Rust Rotor} \\
+Test & Bug condition & Class \\
 \midrule
-Model size & 4,163 lines & 1,176 lines \\
-Nodes & 3,966 & 1,176 \\
-Bad properties & 24 & 3 \\
-States & 14 & 13 \\
-Initialization & Phased (multi-step) & Direct (init stmt) \\
-btormc counterexample & Step 77 (kmax 100) & Step 111 (kmax 200) \\
-Size ratio & 1.0$\times$ (baseline) & 3.5$\times$ smaller \\
+1 & \texttt{argv[1][0]} $=$ 67 (\texttt{'C'}) & exact byte \\
+2 & $\texttt{argv[1][0]}{\cdot}256 + \texttt{argv[1][1]} = 16706$ & ordered pair \\
+3 & \texttt{argv[1][0]} $\neq 0 \wedge$ \texttt{argv[1][1]} $= 0$ & length \\
+4 & \texttt{argv[1][0]}$=$\texttt{'X'} $\wedge$ \texttt{argv[2][0]}$=$\texttt{'Y'} & two args \\
+5 & \texttt{argv[1][0]} $+$ \texttt{argv[1][1]} $= 200$ & arithmetic \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Both implementations produce semantically equivalent results: btormc finds counterexamples in both. The Rust model requires a higher kmax bound (200 vs 100) because the direct initialization encoding results in more unrolling steps, but the generated models are 3.5$\times$ smaller.
+On every program, \texttt{btormc} finds the planted bug within seconds
+and the witness contains exactly the designed bytes. For test~1 the
+bad-exit-code property becomes satisfiable at bound $k{=}67$ with
+witness byte \texttt{argv[1][0]} $=$ \texttt{0x43} $=$ \texttt{'C'} ---
+a value the solver reaches through three pointer dereferences of the
+modeled stack image. Test~4 requires specific bytes in two
+\emph{different} arguments simultaneously; no exploration of standard
+input could ever produce it.
 
-\section{Part 2: Symbolic Argv}
+\section{Differential Validation}
+\label{sec:validation}
 
-Standard Rotor models use concrete initial values. To verify programs whose behavior depends on command-line arguments, we extend the model generator to treat argv entries as unconstrained symbolic bitvectors. This allows the bounded model checker to explore all possible input combinations within the given bound.
+\subsection{Criterion}
 
-\subsection{Implementation}
+Textual comparison of the generated files is meaningless --- the two
+tools serialize the same content differently
+(Section~\ref{sec:size}) --- and formal equivalence of the two
+generators is out of reach; the rotor paper lists formal verification
+of rotor itself as future work~\cite{rotorpaper}. Our criterion is
+behavioural and uses the model checker as an impartial referee, in the
+spirit of differential testing~\cite{mckeeman}:
 
-When symbolic argv mode is enabled, the model generator replaces concrete argv memory contents with BTOR2 \texttt{input} nodes. Each byte of each argument string becomes a fresh symbolic input, while \texttt{argc} and the pointer array structure remain concrete. The kernel \texttt{read} syscall path is similarly extended to support symbolic file input.
+\begin{quote}
+For the same binary and identical generation parameters, both models
+must make the \emph{same property index} satisfiable at the \emph{same
+minimal bound} $k$ --- or both must remain unsatisfiable through the
+bound limit.
+\end{quote}
 
-\subsection{Test Programs}
+The criterion is strict because $k$ counts every machine transition on
+the violating path, from the boot state to the violation: a single
+extra or missing instruction anywhere --- in the boot image, an
+instruction's semantics, a system call --- shifts $k$ or changes the
+property. The verdict also quantifies over all inputs, so no difference
+can hide behind input choice.
 
-We developed five C test programs exercising different input-dependent behaviors:
+\subsection{Setup}
 
-\begin{enumerate}
-\item \textbf{String comparison crash} --- triggers a fault when a specific input string is provided.
-\item \textbf{Numeric overflow} --- integer overflow from parsed command-line input.
-\item \textbf{Length-dependent control flow} --- behavior changes based on argument length.
-\item \textbf{Multi-argument interaction} --- combined effect of multiple argv entries.
-\item \textbf{Checksum computation} --- checksum over input bytes with overflow detection.
-\end{enumerate}
+For each of the 18 benchmarks we generate the reference model with the
+unmodified C rotor (the generation command is recorded in each output
+file's header) and our model with matching parameters, validate both
+with \texttt{catbtor} and a $k{=}0$ \texttt{btormc} load, then run
+\texttt{btormc} with $k_{\max} = 1500$, which covers the bound range the
+rotor paper reports (66--1438). The harness records the (property, $k$)
+pair or UNSAT per side and compares; benchmark/rotor pairs run as
+isolated containers, parallelised across cores.
 
-Each program is compiled with Selfie and modeled both with and without symbolic argv, producing 18 argv-enabled BTOR2 benchmarks across the full test suite of 18 programs.
+\subsection{Results}
 
-\section{Part 3: BTOR2 Visualizer}
-
-To support understanding and debugging of BTOR2 models, we built an interactive web-based visualizer using Cytoscape.js~\cite{cytoscape} with 3,065 lines of JavaScript, HTML, and CSS. The visualizer renders models as node graphs with category-specific shapes, supports multiple layout algorithms, and can animate witness trace playback.
-
-\subsection{Graph Rendering}
-
-The parser reads BTOR2 text and builds a node map with operand edges. Nodes are classified into categories (logic, state, input, constant, memory, bad, constraint) and rendered with distinct shapes: octagons for bad states, diamonds for constants, barrels for inputs, pentagons for memory, and hexagons for constraints.
-
-\subsection{Layout Modes}
-
-Two layout algorithms are available. The \textbf{hierarchical layout} (dagre) places nodes in ranked layers with bottom-to-top flow, suitable for understanding data dependencies. The \textbf{force-directed layout} (cose) uses spring-electric simulation for organic clustering, useful for identifying structural patterns in large models. In force mode, nodes are draggable for manual arrangement.
-
-\subsection{Subgraph and Depth Control}
-
-The cone-of-influence view shows only the transitive dependencies of a selected root node (typically a bad property). A depth slider limits the BFS traversal depth, allowing progressive exploration from a root node outward. On the division-by-zero model, selecting the segmentation-fault property reduces the visible graph from 1,176 to approximately 350 nodes.
-
-\subsection{Collapse, Clumping, and Longest Path}
-
-Following Diller~\cite{diller}, double-clicking a node collapses its entire subtree into a single node showing the hidden descendant count. Category clumping groups all nodes of the same type (e.g., all logic operations) into a single meta-node with dashed edges, dramatically reducing visual complexity. On the division-by-zero subgraph, clumping logic and constant nodes reduces 356 visible nodes to approximately 8. Longest-path highlighting uses DFS with memoization to identify the critical path through the model.
-
-\subsection{Witness Trace Animation}
-
-The visualizer parses btormc witness traces and provides step-by-step playback. At each time step, state and input nodes are highlighted with their assigned values (displayed as decimal, hex, or binary), while bad property nodes flash when violated. The player supports play/pause, adjustable speed, forward/backward stepping, and keyboard shortcuts (Arrow keys, Space, Home/End). State and input indices in the witness format are mapped to BTOR2 nids by scanning the model's declarations in order.
-
-\subsection{Export and Deployment}
-
-Graphs can be exported as PNG (rasterized screenshot) or SVG (vector, suitable for papers and presentations). The visualizer is deployed to GitHub Pages and requires no installation --- users can load any BTOR2 file via upload, paste, or URL.
-
-\section{Verification and CI}
-
-The CI pipeline runs three jobs on every push:
-\begin{enumerate}
-\item \textbf{Rust build and lint} --- \texttt{cargo build}, \texttt{cargo clippy}, \texttt{cargo fmt --check}.
-\item \textbf{Visualizer lint} --- JavaScript syntax validation.
-\item \textbf{BTOR2 model verification} --- well-formedness checks using \texttt{catbtor}/\texttt{btorsim} from btor2tools~\cite{btor2tools}.
-\end{enumerate}
-
-We verified model correctness by running btormc on both Rust and C rotor outputs across benchmark programs. Both implementations produce counterexamples for programs with reachable bad states. Table~\ref{tab:verification} summarizes selected results.
-
-\begin{table}[h]
+\begin{table}[t]
+\caption{Differential validation, target exit code 0. Both rotors'
+verdicts are identical on every row ($k_{\max}{=}1500$).}
+\label{tab:equiv}
 \centering
-\caption{btormc verification results (selected benchmarks)}
-\label{tab:verification}
-\begin{tabular}{llll}
+\footnotesize
+\begin{tabular}{lll}
 \toprule
-\textbf{Benchmark} & \textbf{C (step)} & \textbf{Rust (step)} & \textbf{Property} \\
+Benchmark & Property (both) & $k$ (both) \\
 \midrule
-division-by-zero & 77 & 111 & seg-fault \\
-simple-assignment & safe & safe & all safe \\
-invalid-mem-fail & 45 & 89 & seg-fault \\
+division-by-zero-3-35 & division-by-zero & 76 \\
+invalid-memory-access-fail-2-35 & store-invalid-address & 79 \\
+memory-access-fail-1-35 & load-seg-fault & 66 \\
+nested-if-else-1-35 & bad-exit-code & 100 \\
+nested-if-else-reverse-1-35 & bad-exit-code & 103 \\
+nested-recursion-fail-1-35 & --- & UNSAT \\
+recursive-ackermann-1-35 & bad-exit-code & 152 \\
+recursive-factorial-fail-1-35 & bad-exit-code & 119 \\
+recursive-fibonacci-1-10 & bad-exit-code & 118 \\
+return-from-loop-1-35 & --- & UNSAT \\
+simple-assignment-1-35 & bad-exit-code & 96 \\
+simple-decreasing-loop-1-35 & bad-exit-code & 99 \\
+simple-if-else-1-35 & bad-exit-code & 108 \\
+simple-if-else-reverse-1-35 & bad-exit-code & 108 \\
+simple-if-without-else-1-35 & bad-exit-code & 101 \\
+simple-increasing-loop-1-35 & bad-exit-code & 93 \\
+three-level-nested-loop-fail-1-35 & bad-exit-code & 103 \\
+two-level-nested-loop-1-35 & bad-exit-code & 99 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\section{Discussion}
+Table~\ref{tab:equiv} shows the first configuration (target exit code
+0): 16 benchmarks satisfiable with identical property and identical
+minimal bound --- five distinct property types, including recursion
+matched step-exactly through 152 transitions of nested call frames ---
+and two agreed-UNSAT rows.
 
-Three engineering outcomes were most significant:
+\begin{table}[t]
+\caption{Differential validation, target exit code 1 (the planted
+``non-zero exit code'' bugs of the original experiments). Again
+identical on every row.}
+\label{tab:equiv1}
+\centering
+\footnotesize
+\begin{tabular}{lll}
+\toprule
+Benchmark group & Property (both) & $k$ (both) \\
+\midrule
+division-by-zero-3-35 & division-by-zero & 76 \\
+invalid-memory-access-fail-2-35 & store-invalid-address & 79 \\
+memory-access-fail-1-35 & load-seg-fault & 66 \\
+return-from-loop-1-35 & bad-exit-code & 95 \\
+simple-assignment-1-35 & bad-exit-code & 91 \\
+simple-if-else-1-35 & bad-exit-code & 107 \\
+simple-if-else-reverse-1-35 & bad-exit-code & 105 \\
+simple-if-without-else-1-35 & bad-exit-code & 106 \\
+remaining ten benchmarks & --- & UNSAT \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-\textbf{1) Compact models require deeper bounds.} The Rust version's direct initialization produces 3.5$\times$ smaller models but requires approximately 2$\times$ more unrolling steps for btormc. This is a deliberate tradeoff: smaller models are faster to parse and transmit, while the additional unrolling cost is absorbed by the solver.
+A second configuration targeting exit code 1 --- the planted
+``non-zero exit code'' bugs of the original
+experiments~\cite{rotorpaper}, with the reference models regenerated by
+the unmodified C rotor under \texttt{-~1} --- again agrees on all 18
+(Table~\ref{tab:equiv1}): the three exit-independent properties fire at
+unchanged bounds (they precede any exit on their violating paths), five
+planted bugs fire at $k \in [91,107]$ with identical $k$, and the
+remaining ten are UNSAT on both sides. Notably,
+\texttt{return-from-loop} \emph{flips} from UNSAT to satisfiable at
+$k{=}95$ between the configurations --- identically in both rotors ---
+so the agreement is not an artifact of one parameter choice, and the
+configuration change exercises genuinely different behaviour. In total:
+36 paired verdicts, zero divergences. Our lowest observed bound, 66,
+equals the lowest bound reported in the rotor paper.
 
-\textbf{2) HashMap CSE enables modular construction.} With $O(1)$ deduplication, the builder can be called from independent modules (combinational, sequential, properties) without concern for redundant node creation. This enabled the clean four-module architecture.
+\subsection{The criterion at work}
+\label{sec:atwork}
 
-\textbf{3) Visualization reveals model structure.} The subgraph and clumping features proved essential for understanding models with 1000+ nodes. The cone-of-influence view for a single bad property typically reduces visible nodes by 60--70\%, making the dependency structure comprehensible.
+The strongest evidence for the criterion is that it failed loudly
+throughout development. Uninitialized segment arrays made a wrong
+property fire at a shallow bound; a missing \texttt{argv} boot image
+turned a division-by-zero benchmark into a read fault; a mis-ported
+break-validity predicate fired at $k{=}5$. Each defect produced a
+visibly different (property, $k$) pair; the final all-green table was
+reached by fixing models, never by weakening the criterion.
 
-\section{Limitations}
+The harness once also caught \emph{itself}: under memory pressure from
+parallel solver instances, one container was killed and the runner
+recorded its empty output as UNSAT, producing the campaign's only
+apparent divergence. Investigation --- prompted precisely because one
+anomaly stood against 17 matches --- re-ran the case in isolation and
+obtained identical verdicts; the runner now distinguishes ``solver
+completed, nothing reachable'' from ``no output''.
 
-The Rust rewrite generates 3 abstract bad properties (exit code, division-by-zero, segmentation fault) compared to 24 granular properties in the C version (per-instruction-type checks). This is sufficient for detecting violations but provides less diagnostic precision.
+\emph{Threats to validity.} The evidence is bounded: 18 programs, depth
+1500, two configurations. Paths the suite does not exercise (compressed
+instruction execution, W-suffixed arithmetic of gcc binaries) are
+ported but not differentially validated. The two UNSAT rows are
+agreement on silence, weaker than the 16 step-exact matches.
 
-The symbolic argv implementation models argument bytes as unconstrained inputs. Real-world constraints (e.g., null-termination, printable ASCII) are not yet modeled, which may lead to spurious counterexamples.
+\section{Performance Analysis}
+\label{sec:performance}
 
-The visualizer's force-directed layout can be slow on models with more than 2,000 nodes. The hierarchical layout remains performant up to approximately 5,000 nodes.
+\subsection{Measurements}
 
-\section{Conclusion}
+Both rotors were measured on the same input --- selfie self-compiled to
+43{,}406 RISC-U instructions --- consuming the pre-compiled binary, so
+compilation cost is excluded on both sides (Table~\ref{tab:perf}).
 
-We presented a Rust reimplementation of the Rotor BTOR2 model generator with two extensions: symbolic argv for input-dependent verification and an interactive web visualizer. The Rust version produces 3.5$\times$ smaller models while maintaining semantic equivalence with the C reference. The visualizer provides multiple complementary views (subgraph, clumping, depth-limited) that make large models tractable, and witness trace animation enables step-by-step inspection of counterexamples.
+\begin{table}[t]
+\caption{Generating the model of selfie's self-compilation.}
+\label{tab:perf}
+\centering
+\footnotesize
+\begin{tabular}{lrrr}
+\toprule
+ & C rotor & Rust rotor & ratio \\
+\midrule
+wall-clock time & 139\,s & 0.06--0.14\,s & ${\sim}10^3$ \\
+peak memory & 428\,MB & 20\,MB & ${\sim}21\times$ \\
+lines/nodes created & 3{,}171{,}632 & 159{,}018 & $20\times$ \\
+output size & 10.6\,MB & 3.1\,MB & $3.4\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-All components are integrated in a CI-tested repository with 36 Rust BTOR2 benchmarks (18 standard, 18 with symbolic argv), a GitHub Pages deployment of the visualizer, and Docker-based btormc verification.
+\subsection{Counting the basic operation}
 
-\section{Outlook}
+Following classical profiling methodology, we defined the basic
+operation both tools share --- the question \emph{``is this
+subexpression already in the system?''} --- located the code answering
+it (\texttt{find\_equal\_line} in the reference, a hash-map probe in
+ours), and added plain counters to both (Table~\ref{tab:counters}).
 
-\textbf{1) Multi-core verification.} The Rust rewrite supports multi-core configuration but concurrent property verification across cores has not been tested. Extending the bad-state properties to reason about inter-core interference is a natural next step.
+\begin{table}[t]
+\caption{Counter profile of the deduplication question (selfie input).}
+\label{tab:counters}
+\centering
+\footnotesize
+\begin{tabular}{lrr}
+\toprule
+ & C rotor & Rust rotor \\
+\midrule
+node creations & 3{,}171{,}632 & 159{,}018 \\
+question asked & 9{,}976 & 159{,}018 \\
+answer ``yes'' (hits) & 6{,}021 & 48{,}114 \\
+basic operations & 11{,}695{,}232{,}963 & 159{,}018 \\
+unique in output & 138{,}820 & 110{,}904 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-\textbf{2) Incremental model checking.} The current workflow regenerates the entire BTOR2 model on each invocation. Supporting incremental updates (e.g., when only one function changes) could significantly reduce verification turnaround time.
+The counters are self-consistent on both sides (creations minus hits
+equals the tool's own reported line/node count, exactly), and they
+explain everything. The reference answers the question by walking a
+linked list of all previously created lines; at an average of 1.17
+million comparisons per question, it deliberately asks it only 9{,}976
+times --- reuse is disabled in the hot binary-loading path --- and still
+spends 11.7 \emph{billion} comparisons, which at nanosecond scale
+accounts for essentially the entire 139\,s wall time. Our generator
+asks the question on every creation, at one hash probe each.
 
-\textbf{3) Constraint refinement for symbolic argv.} Adding constraints for null-terminated strings, bounded lengths, and character class restrictions would reduce spurious counterexamples and improve practical utility.
+The creation counts reveal a second, architectural difference: the
+reference creates 3.17M line records and prunes unreachable ones when
+printing (create-then-filter), which is also its 428\,MB peak; our hash
+probe precedes allocation, so duplicates and dead nodes never exist
+(filter-at-creation), leaving 159k attempted and 111k unique nodes in
+20\,MB. The speedup is therefore fully attributed: same question,
+different data structure, asked at a different point in the pipeline ---
+and Section~\ref{sec:cse} shows the answer's \emph{meaning} is
+unaffected.
 
-\textbf{4) Collaborative visualization.} The web-based visualizer could be extended with shareable URLs encoding model state, enabling collaborative debugging and annotation of BTOR2 models.
+\subsection{The deduplication-off experiment}
+\label{sec:cse}
 
-\begin{thebibliography}{6}
+If the rewrite were faster because it deduplicates differently in a
+semantically visible way, disabling deduplication in both tools should
+expose it. With our \texttt{--no-cse} flag, models grow by $1.43\times$
+(selfie: 110{,}904 to 159{,}018 lines), remain well-formed, and receive
+\emph{identical} model-checking verdicts --- on the worked example, the
+no-deduplication model still reports division-by-zero at bound 76.
+Deduplication is provably cosmetic in our generator. (The modest growth
+factor is itself informative: most of a binary-initialized model is the
+initialization chain writing unique words to unique addresses, with
+little to share; the sharing lives in the machine logic, where, e.g.,
+one address-validity subformula serves eleven consumers.)
 
-\bibitem{selfie}
-C.~Kirsch et~al., ``Selfie: A Minimal Self-Contained Educational RISC-V System,'' \url{https://github.com/cksystemsteaching/selfie}
+The reference cannot complete the same experiment. Run with
+\texttt{reuse\_lines = 0}, it \emph{crashes} within 0.08 seconds:
+
+\begin{lstlisting}
+./rotor: ite then sort mismatch error
+\end{lstlisting}
+
+\noindent The cause is an invariant interaction. The reference's
+sort-compatibility check compares sort lines by \emph{pointer}:
+
+\begin{lstlisting}
+void match_sorts(uint64_t* sid1,
+                 uint64_t* sid2, char* c) {
+  if (sid1 == sid2) ...
+\end{lstlisting}
+
+\noindent which is sound only under the invariant its line constructor
+documents --- ``pointer equivalence iff structural equivalence'' ---
+and that invariant is exactly what line reuse maintains. With reuse
+off, two structurally identical bit-vector sorts are distinct pointers,
+and the first if-then-else construction fails its then-branch check.
+Line reuse in the reference is thus load-bearing, not merely an
+optimisation. We reported the crash with a complete reproduction
+(including a Dockerfile) and suggested fixes: fall back to structural
+comparison when pointers differ, or always reuse sort lines regardless
+of the flag.
+
+\subsection{Output size}
+\label{sec:size}
+
+The output files differ in size while encoding the same content. With
+comments stripped in both tools, the reference's 10.59\,MB shrinks to
+5.21\,MB --- 50.8\% of its bytes are comments --- against our 2.97\,MB,
+a raw ratio of $1.76\times$ explained by constant encoding (binary
+digit strings versus decimal), node-identifier width (7 versus 5 digits
+on average), and the duplicate lines of
+Section~\ref{sec:performance}. File size is serialization, not
+semantics; the behavioural identity of the models is established by
+Section~\ref{sec:validation}.
+
+\section{Witness Visualizer}
+\label{sec:visualizer}
+
+The third obstacle is the witness format. What \texttt{btormc} returns
+when it finds a bug is sound, complete, and humanly opaque:
+
+\begin{lstlisting}
+sat
+b23
+#0
+3 01000011 argv[1][0]#0
+4 10000010 argv[1][1]#0
+; ... thousands of lines keyed to
+; internal node numbers ...
+\end{lstlisting}
+
+Our browser-based visualizer (no installation; also hosted online)
+renders a BTOR2 model as an interactive graph --- nodes shaped and
+coloured by role (bad states as red octagons, machine states green,
+constants as diamonds), with cone-of-influence views, depth-limited
+exploration, subtree collapsing, category clumping, search, and image
+export --- and replays a \texttt{btormc} witness on top of it: a
+timeline scrubber steps through the trace, showing per step the chosen
+input bytes, the changed state values, and finally the fired property.
+Models with $10^5$ nodes remain navigable through the focus tools; the
+five argv programs of Section~\ref{sec:argvtests} ship as preloaded
+examples together with their solved witnesses. Replaying test~4 shows
+the solver's bytes \texttt{'X'} and \texttt{'Y'} flowing through the
+pointer chain into the comparison that decides the bug. The visualizer
+turns ``the solver found a bug'' from a wall of binary text into an
+explanation a non-expert can follow --- and it doubles as a debugging
+instrument for the generator itself, since a malformed model is often
+visibly malformed as a graph.
+
+\section{Related Work}
+
+Rotor~\cite{rotorpaper} defines the model family we generate; BTOR2,
+\texttt{btormc}, and Boolector~\cite{btor2} define the format and
+reference checking toolchain, and bitme~\cite{bitme} explores
+alternative reasoning over the same models. BMC originates
+with~\cite{biere1999}; CBMC~\cite{cbmc} applies it at the C level,
+whereas rotor models machine code, trading abstraction for
+bit-precision on the executed artifact. Symbolic execution engines such
+as KLEE~\cite{klee} explore path-by-path with a solver per path and
+support symbolic arguments via a modeled environment; our approach
+instead leaves argument bytes open inside a single monolithic
+transition-system model checked exhaustively to a bound. Hash-consing
+is folklore made precise by~\cite{hashconsing}; our contribution is not
+the technique but the measured, counter-level comparison against a
+linear-scan implementation of the same sharing question. Our validation
+methodology is differential testing~\cite{mckeeman} with an unusually
+sharp oracle: a bit-precise model checker comparing minimal
+counterexample depths.
+
+\section{Conclusions}
+
+We presented a Rust reimplementation of rotor that is three orders of
+magnitude faster at model generation, a symbolic-console-arguments
+extension that opens a previously unreachable input surface to bounded
+model checking, and a witness visualizer that closes the pipeline for
+human consumption. The validation methodology carried the project: by
+demanding identical (property, minimal-bound) verdicts from an
+independent model checker across 36 paired runs, it caught every
+modeling defect we introduced, one crash in the reference tool, and one
+bug in our own measurement harness --- and its final, fully green table
+is the precise sense in which the two generators are equivalent.
+
+Future work includes symbolic argument \emph{count} and packed string
+layouts, symbolic environment variables and file contents, extending
+differential validation to gcc-compiled binaries exercising the
+compressed and W-suffixed instruction paths, deeper bounds for the two
+agreed-UNSAT benchmarks, and --- as for the reference --- formal
+verification of the generator itself.
+
+\section*{Acknowledgments}
+
+We thank Christoph M.\ Kirsch for supervision and for the profiling and
+validation methodology this paper applies, and the selfie project for
+the reference implementation and benchmark suite.
+
+\begin{thebibliography}{9}
+
+\bibitem{rotorpaper}
+A.~Bolotina, C.~M.~Kirsch, S.~Muroya Lei, M.~Pleschinger, and
+A.~Shorabi, ``Rotor: Generating RISC-V machine models for bounded model
+checkers and SMT solvers,'' University of Salzburg, 2025.
 
 \bibitem{btor2}
-A.~Niemetz, M.~Preiner, C.~Wolf, and A.~Biere, ``BTOR2, BtorMC and Boolector 3.0,'' in \emph{CAV 2018}, LNCS 10981, pp.~587--595, 2018.
+A.~Niemetz, M.~Preiner, C.~Wolf, and A.~Biere, ``BTOR2, BtorMC and
+Boolector 3.0,'' in \emph{Proc.\ CAV}, 2018, pp.~587--595.
 
-\bibitem{btor2tools}
-Boolector contributors, ``btor2tools: Tools for the BTOR2 format,'' \url{https://github.com/Boolector/btor2tools}
+\bibitem{biere1999}
+A.~Biere, A.~Cimatti, E.~Clarke, and Y.~Zhu, ``Symbolic model checking
+without BDDs,'' in \emph{Proc.\ TACAS}, 1999, pp.~193--207.
 
-\bibitem{diller}
-M.~Diller, ``Visualizing BTOR2 Models,'' Bachelor thesis, University of Salzburg, 2022.
+\bibitem{selfie}
+C.~M.~Kirsch, ``Selfie and the basics,'' in \emph{Proc.\ ACM Onward!},
+2017.
 
-\bibitem{cytoscape}
-M.~Franz et~al., ``Cytoscape.js: A graph theory library for visualisation and analysis,'' \emph{Bioinformatics}, vol.~32, no.~2, 2016.
+\bibitem{bitme}
+A.~Bolotina et al., ``Bitme: Incremental concurrent bounded model
+checking of RISC-V machine models using binary decision diagrams,''
+under submission, 2026.
 
-\bibitem{repo}
-Repository source and artifacts, \url{https://github.com/jaspek/rotor-rust}
+\bibitem{riscv}
+A.~Waterman and K.~Asanovi\'{c}, Eds., \emph{The RISC-V Instruction Set
+Manual, Volume I: User-Level ISA}, 2017.
+
+\bibitem{cbmc}
+E.~Clarke, D.~Kroening, and F.~Lerda, ``A tool for checking ANSI-C
+programs,'' in \emph{Proc.\ TACAS}, 2004, pp.~168--176.
+
+\bibitem{klee}
+C.~Cadar, D.~Dunbar, and D.~R.~Engler, ``KLEE: Unassisted and automatic
+generation of high-coverage tests for complex systems programs,'' in
+\emph{Proc.\ OSDI}, 2008, pp.~209--224.
+
+\bibitem{mckeeman}
+W.~M.~McKeeman, ``Differential testing for software,'' \emph{Digital
+Technical Journal}, vol.~10, no.~1, pp.~100--107, 1998.
+
+\bibitem{hashconsing}
+J.-C.~Filli\^{a}tre and S.~Conchon, ``Type-safe modular hash-consing,''
+in \emph{Proc.\ ACM Workshop on ML}, 2006, pp.~12--19.
 
 \end{thebibliography}
 
