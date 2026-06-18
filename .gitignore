@@ -70,3 +70,12 @@ benchmarks/output*
 # --- Local-only experimental subproject (not part of the main deliverable) --
 agent-bitr/
 presentations/_build*/
+
+# differential-validation working dirs (regenerable models + results)
+benchmarks/eqv-baseline/
+benchmarks/eqv-dedupall/
+benchmarks/eqv-baseline-e1/
+benchmarks/eqv-dedupall-e1/
+benchmarks/eqv-results/
+benchmarks/*-rotorized.btor2
+benchmarks/binaries/*-rotorized.btor2
