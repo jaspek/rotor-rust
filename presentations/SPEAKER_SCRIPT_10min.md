@@ -88,19 +88,21 @@ Times are targets (~10:00 total). Slide numbers match the deck.*
 > with Y. It derived the secret by logic. We wrote five of these traps; the
 > solver cracked all five."
 
-### Slide 9 — Live demo (1:30)
+### Slide 9 — The answer, made watchable (1:20)
 > "But there is a catch: the solver's raw answer is thousands of lines of
 > binary keyed to internal numbers. A correct answer nobody can read convinces
-> nobody. So we built a browser tool that turns it into a film.
+> nobody. So we built a browser tool that turns it into a graph you can read.
 >
-> *(switch to the demo)* This is the model as a graph. I load the answer for
-> the X-Y bug and press play — and you watch the solver's chosen bytes, the X
-> and the Y, flow through memory into the comparison, until this red node, the
-> bad state, lights up. The verification result stops being a wall of text and
-> becomes a story you can follow. It is online, no install."
+> This is the actual model. Each node is a piece of the machine — the diamonds
+> are constants, the green box is the register state. We replay the witness on
+> top of it, and at the final step this red node — the bad state — is reported
+> VIOLATED, fed by exactly the logic that read the argument bytes the solver
+> chose. The verification result stops being a wall of text and becomes
+> something you can point at. The tool is online with twelve examples."
 >
-> *(Fallback if the browser misbehaves: narrate slide 9 and move on — don't
-> fight the laptop.)*
+> *(This is a screenshot — no live demo needed. If you want to show it live
+> as well, the page is at jaspek.github.io/rotor-rust; but the slide stands on
+> its own.)*
 
 ### Slide 10 — One idea, proved in C too (1:00)
 > "One last result we are proud of. To show the speed was the idea and not

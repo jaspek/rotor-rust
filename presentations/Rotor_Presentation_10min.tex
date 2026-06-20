@@ -198,20 +198,21 @@
 \end{frame}
 
 % =====================================================================
-% 9 . VISUALIZER (live demo)                                   [DANIEL]
+% 9 . VISUALIZER (screenshot, not live)                        [DANIEL]
 % =====================================================================
-{\setbeamercolor{background canvas}{bg=ink}
- \setbeamercolor{normal text}{fg=paper}
-\begin{frame}
+\begin{frame}{The answer, made watchable}
   \vfill
-  \centering
-  {\fontsize{30}{34}\selectfont\textbf{\color{paper}Live demo}}\\[12pt]
-  {\large\color{faint}Watch \textcolor{accent}{\textbf{X}} and
-   \textcolor{accent}{\textbf{Y}} flow through memory,}\\[2pt]
-  {\large\color{faint}until the bad state lights up.}\\[2.4em]
-  {\footnotesize\color{faint}jaspek.github.io/rotor-rust}
+  \begin{columns}[c]
+    \column{0.46\linewidth}\centering
+      \fbox{\includegraphics[height=0.68\textheight]{figures/visualizer_graph.png}}
+    \column{0.5\linewidth}
+      The witness replayed in the browser. At the final step the bad
+      state --- \textcolor{warm}{\textbf{bad-exit-code VIOLATED}} ---
+      lights up red, fed by the logic that read the argument bytes.\\[1em]
+      \lab{Live tool, 12 examples: jaspek.github.io/rotor-rust}
+  \end{columns}
   \vfill
-\end{frame}}
+\end{frame}
 
 % =====================================================================
 % 10 . THE TWIST                                               [DANIEL]
