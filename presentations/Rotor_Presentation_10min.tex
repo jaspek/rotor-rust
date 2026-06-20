@@ -1,0 +1,485 @@
+\documentclass[aspectratio=169]{beamer}
+
+% ============================================================
+% 10-MINUTE TALK + 5-MINUTE Q&A BACKUP
+% Storytelling style, two speakers (Jasmin / Daniel).
+%
+% Compile slides only:           pdflatex this file (default)
+% Compile WITH speaker notes:    uncomment the line below, recompile.
+%   \setbeameroption{show notes}
+% (or "show notes on second screen=right" for a presenter view)
+% Every frame carries a word-for-word \note{} script, tagged [JASMIN]/[DANIEL]
+% with a rough time budget. Total content ~10 min; backup section is Q&A only.
+% ============================================================
+
+\usepackage{tikz}
+\usepackage{amssymb}
+\usepackage{colortbl}
+\usepackage{booktabs}
+\setbeamertemplate{part page}[default]
+\setbeamertemplate{note page}[plain]
+
+\setbeamerfont{frametitle}{size=\large}
+\setbeamerfont{normal text}{size=\small}
+\usefonttheme[onlymath]{serif}
+
+\newcommand{\deflab}[2]{%
+  \textbf{#1}\par\vspace{0.05cm}%
+  {\color{blue!55!black}\itshape #2}\par\vspace{0.05cm}}
+\newcommand{\keylab}[1]{\textbf{\color{blue!55!black}#1}}
+\newcommand{\flag}[1]{\texttt{\small #1}}
+\newcommand{\sketchbox}[2]{%
+  \begin{center}\fbox{%
+    \begin{minipage}[c][#1][c]{0.85\linewidth}\centering
+      \textbf{\textit{LIVE DEMO}}\\[0.3em]\footnotesize #2
+    \end{minipage}}\end{center}}
+
+\usetheme{metropolis}
+\usecolortheme{default}
+\metroset{block=fill}
+\metroset{numbering=fraction}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usetikzlibrary{arrows.meta, positioning}
+
+\title{Can You Trust a Verification Tool\\You Rewrote Yourself?}
+\subtitle{Rotor in Rust --- faster generation, symbolic console arguments,
+          and a readable answer}
+\author[J.\ Begi\'{c} \and D.\ Wassie]{Jasmin Begi\'{c} \and Daniel Wassie}
+\institute{Advanced Systems Engineering --- supervised by Prof.\ Christoph Kirsch}
+\date{June 24th 2026 \quad$\cdot$\quad 10-minute talk}
+
+\begin{document}
+
+% ============================================================
+% TITLE  [JASMIN opens]
+% ============================================================
+\begin{frame}
+  \titlepage
+\end{frame}
+\note{[JASMIN --- 0:15]\\
+``Imagine someone hands you a tool that checks whether software can ever
+crash --- and then asks you to rebuild it from scratch, and prove your
+version still tells the truth. That's our project. I'm Jasmin, this is
+Daniel. Ten minutes, one story: \textbf{can you trust a verification tool
+you rewrote yourself?}''}
+
+% ============================================================
+% 1. THE PROBLEM  [JASMIN]
+% ============================================================
+\begin{frame}{Testing only tries \emph{some} inputs}
+  \begin{columns}[T]
+    \column{0.52\linewidth}
+      \deflab{Testing}{run it on a few inputs, watch what happens}
+      \begin{itemize}
+        \item just 8 bytes of input $=\ 2^{64}$ possibilities
+        \item more than stars in the sky --- you try a handful
+      \end{itemize}
+      \vspace{0.3cm}
+      \deflab{Verification}{reason about \emph{every} input at once}
+      \begin{itemize}
+        \item treat the input as algebra, not as guesses
+        \item ``can it crash, ever, within $k$ steps?''
+      \end{itemize}
+    \column{0.44\linewidth}
+      \centering
+      \vspace{0.4cm}
+      {\Large $2^{64}$}\\[0.2em]
+      {\footnotesize possible inputs}\\[0.8cm]
+      {\Large vs.}\\[0.8cm]
+      {\large \textbf{1 question}}\\[0.2em]
+      {\footnotesize answered for all of them}
+  \end{columns}
+\end{frame}
+\note{[JASMIN --- 1:00]\\
+``The normal way to find bugs is testing: you run a program on some inputs
+and see if it breaks. But a program reading just eight bytes has more
+possible inputs than there are stars in the sky --- and you only ever try a
+handful. So testing can't tell you a program is \emph{safe}; only that it
+didn't break the times you looked.\\[2pt]
+There's a stronger idea: \textbf{verification}. Instead of trying inputs one
+by one, you treat the unknown input like algebra --- like solving x plus
+three equals seven without guessing every number --- and you ask one
+question that covers \emph{all} inputs: can this program reach a bad state,
+ever, within k steps? If yes, you even get the exact input that does it.''}
+
+% ============================================================
+% 2. THE PIPELINE  [JASMIN]
+% ============================================================
+\begin{frame}{The pipeline --- and our tool sits in the middle}
+  \begin{center}
+  \begin{tikzpicture}[
+      box/.style={draw, rounded corners=2pt, minimum height=1.0cm,
+                  minimum width=2.0cm, align=center, font=\footnotesize},
+      ours/.style={box, fill=blue!12, draw=blue!55!black, very thick},
+      arr/.style={-{Stealth[length=2.5mm]}, thick}]
+    \node[box]                      (bin) {RISC-V\\binary};
+    \node[ours, right=0.6cm of bin] (mod) {\textbf{rotor}\\BTOR2 model};
+    \node[box, right=0.6cm of mod]  (sol) {btormc\\(solver)};
+    \node[ours, right=0.6cm of sol] (vis) {\textbf{visualizer}\\replay};
+    \draw[arr] (bin) -- (mod); \draw[arr] (mod) -- (sol); \draw[arr] (sol) -- (vis);
+  \end{tikzpicture}
+  \end{center}
+  \vspace{0.2cm}
+  \begin{itemize}
+    \item \keylab{rotor} turns a real binary into a math model of the machine
+    \item the solver searches it; we rebuilt rotor and added the replay
+  \end{itemize}
+\end{frame}
+\note{[JASMIN --- 0:50]\\
+``Here's the assembly line. You start with a compiled program --- the actual
+machine code, not the source. A tool called \textbf{rotor} translates it
+into a mathematical model of the processor running it. A solver searches that
+model for bugs. \\[2pt]
+Rotor already existed --- written by Professor Kirsch's group, in one
+14-thousand-line C file. Our job: rebuild it, make it better, and add the
+last box --- a way to actually \emph{read} the answer. The two blue boxes are
+ours.''}
+
+% ============================================================
+% 3. THE SPEED MYSTERY  [JASMIN] -- the engaging counting story
+% ============================================================
+\begin{frame}{We rebuilt it in Rust --- and it got 1{,}000$\times$ faster}
+  \begin{center}
+  \begin{tabular}{lrr}
+    \toprule
+    modeling selfie (43k instructions) & C rotor & \textbf{Rust rotor}\\
+    \midrule
+    time   & 139 s   & \textbf{$<$0.1 s}\\
+    memory & 428 MB  & \textbf{20 MB}\\
+    \bottomrule
+  \end{tabular}
+  \end{center}
+  \vspace{0.3cm}
+  \begin{block}{The supervisor's reaction: ``don't trust that --- \emph{count}''}
+    One repeated question: \emph{``have I built this piece before?''}\\[2pt]
+    C walks a list: \textbf{11{,}695{,}232{,}963} comparisons.\hfill
+    Rust: one hash lookup --- \textbf{159{,}018}.
+  \end{block}
+\end{frame}
+\note{[JASMIN --- 1:30]\\
+``So we rebuilt rotor in Rust. And it ran about a thousand times faster ---
+selfie's model dropped from \emph{139 seconds} to under a tenth of a second,
+and from 428 megabytes to twenty.\\[2pt]
+When we showed Professor Kirsch, he didn't celebrate --- he got
+\emph{suspicious}. `Maybe it's faster because it's doing less. Don't trust the
+number --- count.' So we did exactly what he taught: we found the one
+repeated operation both tools share --- the question `have I already built
+this piece of the model before?' --- and put a counter on it in both.\\[2pt]
+The C tool answers that question by walking a list of everything it built so
+far. Eleven-point-seven \emph{billion} comparisons. Our Rust version asks the
+same question with a hash table --- one lookup each, 159 thousand total. Same
+question. Same answer. A list versus an index. \emph{That}'s the whole
+thousand-x --- nothing skipped.''}
+
+% ============================================================
+% 4. CAN YOU TRUST IT  [JASMIN] -> hands to Daniel
+% ============================================================
+\begin{frame}{``There's no way to know that. Check them yourself.''}
+  \begin{center}
+  \large The honest test: let the \emph{solver} be the referee.\par
+  \vspace{0.2cm}
+  \normalsize same program $\rightarrow$ same bad state at the \emph{same step}?
+  \end{center}
+  \vspace{0.2cm}
+  \begin{center}
+  \begin{tabular}{lcc}
+    \toprule
+    & C rotor & Rust rotor\\
+    \midrule
+    division-by-zero & step 76 & \cellcolor{green!20}step 76\\
+    memory fault     & step 66 & \cellcolor{green!20}step 66\\
+    \dots 18 programs, 2 settings & \multicolumn{2}{c}{\cellcolor{green!20}\textbf{36 / 36 identical}}\\
+    \bottomrule
+  \end{tabular}
+  \end{center}
+  \vspace{0.15cm}
+  \centering\footnotesize Every bug we hit on the way showed up here first ---
+  the test is sharp because it caught us.
+\end{frame}
+\note{[JASMIN --- 1:15, then HAND OFF]\\
+``But fast is worthless if it's wrong. When we claimed our models matched,
+the professor said: `There's no way to know that. Check them yourself.'\\[2pt]
+So we made the \emph{solver} the referee. For the same program, both models
+must reach the \emph{same} bad state at the \emph{exact same step number} ---
+and that step count is a fingerprint of the entire execution; one wrong
+instruction shifts it. We ran all 18 of his benchmark programs, under two
+settings: \textbf{36 out of 36 identical}. And we trust that bar because
+every single bug we made during development failed it \emph{loudly} first.\\[2pt]
+That's the foundation. But a verifier is only as good as what it can
+\emph{see} and what you can \emph{do} with its answer --- and that's Daniel's
+half.''}
+
+% ============================================================
+% 5. SYMBOLIC ARGV -- THE GAP  [DANIEL]
+% ============================================================
+\begin{frame}{A whole class of bugs was invisible}
+  \begin{columns}[T]
+    \column{0.54\linewidth}
+      \deflab{Before}{the solver could only explore what you type at the
+                      keyboard (stdin)}
+      \begin{itemize}
+        \item command-line arguments were \emph{frozen}
+        \item a bug needing \texttt{./prog SECRET} was unreachable
+      \end{itemize}
+      \vspace{0.25cm}
+      \deflab{Our addition: symbolic argv}{leave the argument bytes
+              \emph{open} for the solver to choose}
+  \column{0.42\linewidth}
+      \centering
+      \vspace{0.3cm}
+      \fbox{\parbox{0.92\linewidth}{\centering\footnotesize
+        the paper's own words:\\[3pt]
+        \textit{``console arguments as symbolic input is \textbf{future
+        work}''}}}\\[0.4cm]
+      {\footnotesize We built the future-work item.}
+  \end{columns}
+\end{frame}
+\note{[DANIEL --- 1:00]\\
+``Thanks. So here's a gap we found. The solver could only explore input typed
+at the keyboard --- standard input. But programs also get input from
+\emph{command-line arguments}: the words after the program's name. In the old
+models, those were frozen. So any bug that only happens for a specific
+argument --- like `./program CRASH' --- was \emph{structurally invisible}. The
+solver wasn't failing to find it; it wasn't allowed to look.\\[2pt]
+We fixed that. We leave the argument bytes \emph{open} --- blanks the solver
+fills in. And this wasn't our idea to invent: the original rotor paper lists
+`console arguments as symbolic input' as \emph{future work}. We built their
+future-work item.''}
+
+% ============================================================
+% 6. THE X / Y BUG  [DANIEL]
+% ============================================================
+\begin{frame}{The solver finds the secret by itself}
+  \begin{center}
+  \texttt{\small if (argv[1][0]=='X' \&\& argv[2][0]=='Y') \textcolor{red}{crash();}}
+  \end{center}
+  \vspace{0.2cm}
+  \begin{itemize}
+    \item two specific letters, in \emph{two different} arguments at once
+    \item impossible to reach through stdin --- the program never reads it
+    \item solver's answer, in seconds: \keylab{argv[1][0]=X}, \keylab{argv[2][0]=Y}
+  \end{itemize}
+  \vspace{0.15cm}
+  \centering\footnotesize Five such programs --- five bugs found, exact bytes,
+  none reachable the old way.
+\end{frame}
+\note{[DANIEL --- 1:00]\\
+``Let me make it concrete. This program crashes only if the first letter of
+argument one is X \emph{and} the first letter of argument two is Y --- two
+specific characters, in two \emph{different} arguments, at the same time. No
+amount of keyboard input could ever trigger it; the program never reads the
+keyboard.\\[2pt]
+We hand the model to the solver, and in seconds it comes back with: argument
+one starts with X, argument two starts with Y. It \emph{derived the secret}
+--- by logic, not guessing. We wrote five of these traps; the solver cracked
+all five, every time with the exact bytes.''}
+
+% ============================================================
+% 7. THE VISUALIZER -- LIVE DEMO  [DANIEL]
+% ============================================================
+\begin{frame}{But the answer is unreadable --- so we made it watchable}
+  \sketchbox{4.6cm}{open \texttt{argv test4} in the browser tool ---\\
+    press play --- watch the solver's \textbf{X} and \textbf{Y} flow through
+    memory into the comparison, until the red ``bad'' node lights up.}
+  \vspace{-0.1cm}
+  \centering\footnotesize \url{jaspek.github.io/rotor-rust}
+\end{frame}
+\note{[DANIEL --- 1:30, LIVE]\\
+``There's one catch: the solver's raw answer is thousands of lines of binary
+keyed to internal numbers --- unreadable for anyone who didn't build the tool.
+A correct answer nobody can read convinces nobody.\\[2pt]
+So we built a browser tool that turns it into a film. \emph{(switch to demo)}
+This is the model as a graph. I load the witness for the X/Y bug, press play,
+and you watch the solver's chosen bytes --- there's the X, there's the Y ---
+flow through memory, into the comparison, until \emph{this} red node, the bad
+state, lights up. The verification result stops being a wall of text and
+becomes a story you can follow. It's online, no install.''}
+
+% ============================================================
+% 8. THE TWIST / INSIGHT  [DANIEL]
+% ============================================================
+\begin{frame}{The twist: we gave the speed-up back --- in his C}
+  \begin{itemize}\setlength\itemsep{0.5em}
+    \item ``Why is yours faster?'' wasn't rhetorical --- so we \emph{proved} it:
+          ported the one idea (the hash lookup) \textbf{back into the C rotor}.
+    \item Result: his own tool, \textbf{$\sim$95$\times$ faster}, \emph{byte-identical}
+          output --- \textbf{36/36} equivalent, same as ours.
+    \item The speed was never the language. It was one data structure.
+  \end{itemize}
+  \vspace{0.2cm}
+  \begin{block}{What we actually learned}
+    The hard part of a rewrite isn't the code --- it's \emph{proving} it still
+    tells the truth. The methodology was the project.
+  \end{block}
+\end{frame}
+\note{[DANIEL --- 1:00]\\
+``And one last twist we're proud of. The professor's question --- `why is
+yours faster?' --- we didn't just answer it, we \emph{proved} it: we took the
+single idea, the hash lookup, and put it back into \emph{his} original C tool.
+His own rotor then ran about ninety-five times faster, producing
+\emph{byte-identical} output, and passed the same 36-out-of-36 equivalence
+check. So the speed was never about Rust versus C --- it was one data
+structure, full stop.\\[2pt]
+And that's the real lesson. The hard part of rebuilding a verification tool
+isn't writing the code --- it's \emph{proving} the new one still tells the
+truth. For us, the methodology \emph{was} the project.''}
+
+% ============================================================
+% CLOSE  [BOTH]
+% ============================================================
+\begin{frame}[standout]
+  Thank you.\\[0.4em]
+  {\small 1{,}000$\times$ faster $\cdot$ a new class of bugs reachable
+  $\cdot$ 36/36 verified $\cdot$ readable answers}\\[0.6em]
+  {\footnotesize github.com/jaspek/rotor-rust \quad$\cdot$\quad
+   jaspek.github.io/rotor-rust}
+\end{frame}
+\note{[BOTH --- 0:15]\\
+``A thousand times faster, a whole class of bugs now reachable, every result
+checked thirty-six out of thirty-six, and an answer you can actually read.
+Thank you --- we're happy to take questions.''}
+
+% ============================================================
+% ===============  BACKUP / Q\&A MATERIAL (5 min)  ===========
+% Not shown in the 10-min run; flip to these when asked.
+% ============================================================
+\part{Backup --- Q\&A material}
+\begin{frame}\partpage\end{frame}
+\note{[Q\&A SECTION --- these slides are only shown if a question calls for
+them. Each note below is the spoken answer.]}
+
+% ---- Q&A 1: the counting numbers ----
+\begin{frame}{Q\&A: the counting, in full}
+  \centering\footnotesize
+  \begin{tabular}{lrr}
+    \toprule
+     & C rotor & Rust rotor\\
+    \midrule
+    node creations            & 3{,}171{,}632       & 159{,}018\\
+    dedup question asked       & 9{,}976             & 159{,}018\\
+    hits (already present)     & 6{,}021             & 48{,}114\\
+    \textbf{basic operations}  & \textbf{11{,}695{,}232{,}963} & \textbf{159{,}018}\\
+    \bottomrule
+  \end{tabular}\\[0.4em]
+  self-check: creations $-$ hits $=$ tool's own reported line count, exactly.
+\end{frame}
+\note{[ANSWER --- ``how exactly did you measure the speed-up?'']\\
+``We instrumented the dedup question in both tools with plain integer
+counters, the way the professor counts everything in selfie. C asks it 10
+thousand times but each answer scans a million-entry list --- 11.7 billion
+comparisons total. Rust asks it every time, but each is one hash probe ---
+159 thousand. And the counters are self-consistent: creations minus reuses
+equals each tool's own reported line count, to the integer. That's how we
+know we counted the right thing.''}
+
+% ---- Q&A 2: why still faster than the optimized C ----
+\begin{frame}{Q\&A: Rust vs.\ the \emph{optimized} C}
+  \centering\footnotesize
+  \begin{tabular}{lrrr}
+    \toprule
+    selfie & baseline C & C + hash & Rust\\
+    \midrule
+    time   & 139 s   & 1.5 s   & $<$0.1 s\\
+    memory & 428 MB  & 485 MB  & 20 MB\\
+    lines created & 3.17 M & 3.17 M & 159 k\\
+    \bottomrule
+  \end{tabular}\\[0.4em]
+  Hash fixed the \emph{lookup}. The rest is \emph{when} you build:
+  Rust never creates the duplicates; C still does, then prunes.
+\end{frame}
+\note{[ANSWER --- ``if the hash is the whole story, why is Rust still faster
+than your hashed C?'']\\
+``Great question --- two optimizations, not one. The hash fixed the
+\emph{lookup cost}. But the C still \emph{creates} 3.17 million line records
+and prunes later --- create-then-filter. Rust checks before allocating, so
+duplicates never exist --- filter-at-creation. That second difference is the
+memory story and the last factor of speed. We even built that into the C too;
+it stays equivalent, 36/36.''}
+
+% ---- Q&A 3: the dedup-off experiment + the crash ----
+\begin{frame}{Q\&A: ``disable the duplicate check in both''}
+  \begin{itemize}\setlength\itemsep{0.4em}
+    \item \keylab{C rotor, reuse off:} \textbf{crashes} --- \texttt{ite then
+          sort mismatch}. Line reuse is load-bearing, not just speed.
+    \item \keylab{Rust, \flag{--no-cse}:} runs fine; model grows 1.4$\times$,
+          \emph{same} solver verdict. Dedup is cosmetic, never semantic.
+    \item We sent a complete, reproducible crash report + a fix.
+  \end{itemize}
+\end{frame}
+\note{[ANSWER --- the professor's own experiment]\\
+``You asked us to disable the duplicate check in both and see what happens.
+Your C rotor \emph{crashes} --- an internal sort-pointer invariant breaks ---
+so line reuse there is load-bearing, not just an optimization. Ours just runs:
+the model gets 1.4x bigger and the solver gives the \emph{identical} verdict.
+That proves dedup only affects size and speed, never meaning. We sent you a
+complete crash reproduction and a suggested fix.''}
+
+% ---- Q&A 4: file sizes ----
+\begin{frame}{Q\&A: why are the file sizes different?}
+  \centering\footnotesize
+  \begin{tabular}{lrr}
+    \toprule
+    selfie model & with comments & comments stripped\\
+    \midrule
+    C rotor   & 10.6 MB & 5.2 MB \quad(50.8\% was comments)\\
+    Rust rotor & 3.1 MB & 3.0 MB\\
+    \bottomrule
+  \end{tabular}\\[0.5em]
+  Same content, different spelling: comments, binary vs decimal constants,
+  longer node numbers. \emph{Meaning} is identical --- proven by the solver.
+\end{frame}
+\note{[ANSWER --- ``shouldn't the models be the same size if they're equal?'']\\
+``Size is spelling, not meaning. Half of the C file is \emph{comments} ---
+strip them and 10.6 megabytes becomes 5.2. The rest is encoding: C writes
+constants as 64-digit binary strings, we write decimals; its node numbers are
+longer. Same model, fewer characters --- like minified versus pretty-printed
+JSON. The proof they mean the same thing isn't the size; it's the solver
+giving the same verdict, 36 times out of 36.''}
+
+% ---- Q&A 5: how symbolic argv works + honesty ----
+\begin{frame}{Q\&A: how symbolic argv works (and its limits)}
+  \begin{itemize}\setlength\itemsep{0.35em}
+    \item argument bytes $=$ \keylab{uninitialized model states} --- the
+          paper's own device for ``input''; the rest of the stack is concrete.
+    \item the program reads them through \emph{ordinary} loads --- decoder,
+          memory, properties all untouched.
+    \item \keylab{Honest scope:} argument \emph{count} is fixed; lengths
+          bounded; we explore \emph{content}. Sound for C-string programs.
+  \end{itemize}
+\end{frame}
+\note{[ANSWER --- ``how is it actually implemented, and what are the limits?'']\\
+``We build the real process-start stack --- count, pointers, terminators all
+concrete --- but the argument \emph{content} bytes are left uninitialized
+states, which is exactly the device the paper already uses for stdin input.
+The program reads them through ordinary memory loads; we changed nothing in
+the decoder or the safety checks. Honest limits: we fix the \emph{number} of
+arguments and bound their length, and explore their content --- which is
+sound for any program that treats arguments as C strings.''}
+
+% ---- Q&A 6: threats to validity ----
+\begin{frame}{Q\&A: what we do \emph{not} claim}
+  \begin{itemize}\setlength\itemsep{0.4em}
+    \item Not a formal proof of generator equivalence --- that's undecidable,
+          and it's the paper's own future work.
+    \item Evidence is bounded: 18 programs, depth 1500, two settings.
+    \item Two benchmarks agree only by \emph{both} finding nothing (UNSAT) ---
+          weaker than a step-exact match.
+    \item Once, an anomaly was \emph{our harness}, not the rotor --- we found
+          it because one row disagreed with the other seventeen.
+  \end{itemize}
+\end{frame}
+\note{[ANSWER --- ``so are they provably equivalent?'']\\
+``No --- and we're careful to say so. A formal proof that two generators are
+equivalent is undecidable; the paper itself lists it as future work. What we
+have is strong \emph{checkable} evidence: 18 programs, depth 1500, two
+settings, all matching. Two of those agree only by both finding nothing,
+which is weaker than a step-exact hit. And once an apparent mismatch turned
+out to be \emph{our own measurement harness}, not the rotor --- we caught it
+precisely because one result disagreed with the other seventeen. That's the
+methodology policing itself.''}
+
+\end{document}
