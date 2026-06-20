@@ -46,6 +46,8 @@
   penf/.style={draw=ink, line width=0.35pt, line cap=round, line join=round},
   pen2/.style={draw=ink, line width=0.9pt, line cap=round, line join=round},
   wob/.style={decorate, decoration={random steps, segment length=7pt, amplitude=0.4pt}},
+  % paper-backed label so text never collides with the artwork
+  lab/.style={fill=paper, fill opacity=0.9, text opacity=1, rounded corners=2pt, inner sep=3pt},
 }
 
 % saturation knob -> wash opacity \wo (0..1)
@@ -53,11 +55,6 @@
 \setsat{0}
 % wash: fill the current clip region with pigment at wash strength (USE in a clip scope)
 \newcommand{\wfill}[2]{\pgfmathsetmacro{\woo}{\wo*#2}\fill[#1, opacity=\woo] (-3,-3) rectangle (19,12);}
-% paint-well swatch, bottom-right, fills as colour grows
-\newcommand{\swatch}[1]{%
-  \fill[#1, opacity=0.85] (14.98,0.4) rectangle (15.3,{0.4+0.46*\wo});
-  \draw[penf] (14.98,0.4) rectangle (15.3,0.86);
-  \node[inkl, anchor=east, font=\tiny\itshape] at (14.9,0.63) {colour};}
 
 \newcommand{\art}[1]{%
   \begin{frame}[plain]
@@ -176,9 +173,8 @@
   \fill[paper] (10.4,4.6) circle (0.55);
   \draw[pen2] (10.4,4.6) circle (0.32);
   \foreach \a in {0,30,...,330}{\draw[penf] (10.4,4.6)+(\a:0.62) -- +(\a:0.92);}
-  \node[ink] at (10.4,3.4) {\scriptsize the one that crashes};
+  \node[ink, lab] at (10.4,3.4) {\scriptsize the one that crashes};
   \platecap{eight bytes of input --- $2^{64}$ of them --- and you may try only a handful}
-  \swatch{wamber}
 }
 
 % =====================================================================
@@ -199,7 +195,6 @@
      \draw[penf] (8,5.6)+(\a:0.85) -- +(\a:{1.0+0.7*abs(sin(\a*3))});}
   \foreach \x in {2.4,3.2,...,13.6}{\draw[penf, inkl] (8,5.6) -- (\x,3.0);}
   \platecap{can it reach a bad state, for \emph{any} input, within $k$ steps? --- one query covers them all}
-  \swatch{wamber}
 }
 
 % =====================================================================
@@ -218,7 +213,7 @@
      \begin{scope}\clip (\x-0.95,2.7) rectangle (\x+0.95,5.3);
         \clip (\x+0.2,2.4) rectangle (\x+0.95,5.3);
         \hatch{90}{0.1}{0.4pt}{ink}\end{scope}
-     \node[ink] at (\x,4.0) {\small\scshape \lbl};}
+     \node[ink, lab] at (\x,4.0) {\small\scshape \lbl};}
   \foreach \x in {3.55,7.35,11.15}{
      \draw[pen2, -{Stealth[length=2.4mm]}] (\x+0.02,4.0) -- (\x+0.9,4.0);}
   \node[inkl] at (4.5,5.9) {\footnotesize\itshape rotor};
@@ -226,7 +221,6 @@
   \draw[penf,-{Stealth[length=2mm]}] (4.5,5.7) to[bend right=20] (5.6,5.5);
   \draw[penf,-{Stealth[length=2mm]}] (12.4,5.7) to[bend left=20] (13.4,5.5);
   \platecap{the model checker reasons over the real machine code --- exactly what runs}
-  \swatch{wamber}
 }
 
 % =====================================================================
@@ -256,7 +250,6 @@
   \node[ink] at (11.9,6.1) {\footnotesize \itshape divide-by-zero};
   \draw[penf,-{Stealth[length=2mm]}] (11.4,6.4) to[bend left=10] (8.78,7.1);
   \platecap{a position, the legal moves, and the squares the machine must never reach}
-  \swatch{wgold}
 }
 
 % =====================================================================
@@ -281,7 +274,6 @@
      \draw[pen] (12.95,\y) ellipse (0.1 and 0.06);
      \node[ink] at (11.0,\y) {\small\scshape \n};}
   \platecap{same work --- now in four clean parts you can actually read}
-  \swatch{wochre}
 }
 
 % =====================================================================
@@ -307,7 +299,6 @@
   \node[ink] at (8,5.0) {\scshape\fontsize{30}{32}\selectfont $\approx$1000$\times$};
   \draw[penf] (6.7,4.5) -- (9.3,4.5);
   \platecap{139 seconds to a tenth of one --- and 428 megabytes down to twenty}
-  \swatch{wamber}
 }
 
 % =====================================================================
@@ -332,7 +323,6 @@
   \node[inkl] at (11.7,6.0) {\footnotesize\itshape one look-up};
   \node[ink] at (7.7,4.6) {\itshape vs.};
   \platecap{the same question, asked the same way --- a list, against an index}
-  \swatch{wamber}
 }
 
 % =====================================================================
@@ -353,7 +343,6 @@
   \draw[penf,-{Stealth[length=2mm]}] (4.9,5.0) -- (6.5,5.0);
   \draw[penf,-{Stealth[length=2mm]}] (9.5,5.0) -- (11.1,5.0);
   \platecap{the swiftness was never the language --- only one small thing, done well}
-  \swatch{wviolet}
 }
 
 % =====================================================================
@@ -375,7 +364,6 @@
   \foreach \a in {0,45,...,315}{\draw[penf] (8.0,4.6)+(\a:0.12) -- +(\a:0.34);}
   \node[ink] at (8.0,2.4) {\scshape\fontsize{24}{26}\selectfont 95$\times$, byte for byte};
   \platecap{put the one trick back into the original itself --- proof it is the idea, not the tongue}
-  \swatch{wgold}
 }
 
 % =====================================================================
@@ -399,7 +387,6 @@
   \node[inkl] at (3.9,3.1) {\footnotesize frozen};
   \draw[pen,-{Stealth[length=2.4mm]}] (5.6,4.2) -- (7.4,4.2);
   \platecap{the words after the program's name --- once fixed, now free for the solver to choose}
-  \swatch{wgold}
 }
 
 % =====================================================================
@@ -424,9 +411,8 @@
      \draw[pen2] (\cx+\px-0.95,4.5) .. controls (\cx+\px-0.6,3.8) and (\cx+\px+0.6,3.8) .. (\cx+\px+0.95,4.5);}
   \node[ink] at (\cx-3.4,3.5) {\scshape C rotor};
   \node[ink] at (\cx+3.4,3.5) {\scshape rust rotor};
-  \node[ink] at (\cx,4.9) {\scshape\fontsize{30}{32}\selectfont 36 / 36};
+  \node[ink, lab] at (\cx,4.9) {\scshape\fontsize{30}{32}\selectfont 36 / 36};
   \platecap{same bug, at the same step --- for every benchmark, in both settings, with never a tilt}
-  \swatch{wamber}
 }
 
 % =====================================================================
@@ -456,7 +442,6 @@
      \begin{scope}\clip (\g) circle (0.34);\hatch{40}{0.1}{0.35pt}{inkl}\end{scope}
      \draw[pen] (\g) circle (0.34);}
   \platecap{a wall of binary becomes a graph you can point at}
-  \swatch{wteal}
 }
 
 % =====================================================================
@@ -491,8 +476,11 @@
   \draw[pen2] (8.0,7.4) -- (8.0,8.0);
   \fill[wred] (8.0,8.0) -- (8.55,7.85) -- (8.0,7.7) -- cycle;
   \draw[pen2] (8.0,8.0) -- (8.55,7.85) -- (8.0,7.7);
-  \node[ink] at (8,2.15) {\scshape\fontsize{18}{20}\selectfont proving it still tells the truth};
-  \node[ink] at (8,1.55) {\itshape\footnotesize was the whole climb. \quad thank you.};
+  % a parchment cartouche so the closing words sit clear of the painted slopes
+  \fill[paper, opacity=0.9, rounded corners=5pt] (2.7,0.8) rectangle (13.3,2.55);
+  \draw[penf, rounded corners=5pt] (2.7,0.8) rectangle (13.3,2.55);
+  \node[ink] at (8,2.05) {\scshape\fontsize{18}{20}\selectfont proving it still tells the truth};
+  \node[ink] at (8,1.5) {\itshape\footnotesize was the whole climb. \quad thank you.};
   \node[inkl] at (8,1.05) {\scriptsize github.com/jaspek/rotor-rust \,\textbar\, rotor-c-hashcons \,\textbar\, jaspek.github.io/rotor-rust};
 }
 
