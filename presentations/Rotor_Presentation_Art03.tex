@@ -1,0 +1,433 @@
+\documentclass[aspectratio=169]{beamer}
+
+% =====================================================================
+% ART DECK 03 -- the storytelling cut. A talk in three "courses":
+%   I. The Question  (symbolic execution / symbolic argv)
+%   II. The Craft    (three rotors: original C, hash-consed C, Rust)
+%   III. The Plate   (the visualizer)
+% Same no-limits TikZ light-machinery as deck 02. Pairs with
+% SPEAKER_SCRIPT_Story.md (Marco-Pierre-White storytelling register).
+% Two pdflatex passes (remember picture/overlay).
+% =====================================================================
+
+\usepackage{tikz}
+\usepackage[T1]{fontenc}
+\usetikzlibrary{shadings, fadings, shapes.geometric, shapes.misc,
+  decorations.pathmorphing, decorations.pathreplacing, calc, backgrounds,
+  positioning, arrows.meta, shapes.symbols}
+
+\usetheme{default}
+\setbeamertemplate{navigation symbols}{}
+\setbeamercolor{background canvas}{bg=black}
+\setbeamertemplate{footline}{}
+
+\definecolor{indigo}{HTML}{241A52}
+\definecolor{deepblue}{HTML}{0C1733}
+\definecolor{midnight}{HTML}{070C1C}
+\definecolor{ncyan}{HTML}{38E8FF}
+\definecolor{nteal}{HTML}{19E6CE}
+\definecolor{nmag}{HTML}{FF49B0}
+\definecolor{npink}{HTML}{FF77D6}
+\definecolor{nlime}{HTML}{B9FF45}
+\definecolor{namber}{HTML}{FFC24A}
+\definecolor{gold}{HTML}{FFD56B}
+\definecolor{eblue}{HTML}{4F7BFF}
+\definecolor{royal}{HTML}{6A5BFF}
+\definecolor{nviolet}{HTML}{A05CFF}
+\definecolor{ngreen}{HTML}{3CE89A}
+\definecolor{nred}{HTML}{FF5468}
+\definecolor{faint}{HTML}{6E7E92}
+\definecolor{paper}{HTML}{EAF2FB}
+
+\tikzfading[name=rglow,  inner color=transparent!0,  outer color=transparent!100]
+\tikzfading[name=fadeup, top color=transparent!0,    bottom color=transparent!100]
+
+\pgfmathsetseed{313}
+
+\newcommand{\art}[1]{%
+  \begin{frame}[plain]
+  \begin{tikzpicture}[remember picture, overlay,
+      shift={(current page.south west)}, x=1cm, y=1cm]
+    #1
+  \end{tikzpicture}
+  \end{frame}}
+
+\newcommand{\halo}[4]{\fill[#3, opacity=#4, path fading=rglow] #1 circle (#2);}
+
+\newcommand{\spark}[3]{%
+  \fill[#3, opacity=0.55, path fading=rglow] #1 circle ({#2*7});
+  \fill[#3, opacity=0.85, path fading=rglow] #1 circle ({#2*2.8});
+  \begin{scope}[blend mode=screen]
+    \fill[white, opacity=0.55, path fading=rglow] #1 ellipse ({#2*9} and {#2*0.45});
+    \fill[white, opacity=0.55, path fading=rglow] #1 ellipse ({#2*0.45} and {#2*9});
+  \end{scope}
+  \fill[white] #1 circle (#2);}
+
+\newcommand{\neon}[3]{%
+  \draw[#3, line width=7pt, opacity=0.10] #1 -- #2;
+  \draw[#3, line width=3pt, opacity=0.30] #1 -- #2;
+  \draw[white, line width=0.7pt, opacity=0.80] #1 -- #2;}
+
+\newcommand{\bokeh}[1]{%
+  \begin{scope}[blend mode=screen]
+  \foreach \i in {1,...,#1}{%
+     \pgfmathsetmacro{\bx}{rnd*16}\pgfmathsetmacro{\by}{rnd*9}%
+     \pgfmathsetmacro{\br}{0.05+rnd*0.50}\pgfmathsetmacro{\bo}{0.10+rnd*0.38}%
+     \pgfmathtruncatemacro{\ci}{rnd*4.999}%
+     \ifcase\ci \def\bc{ncyan}\or\def\bc{nviolet}\or\def\bc{nmag}\or
+        \def\bc{eblue}\or\def\bc{nteal}\fi
+     \fill[\bc, opacity=\bo, path fading=rglow] (\bx,\by) circle (\br);}
+  \end{scope}}
+
+\newcommand{\dust}[1]{%
+  \foreach \i in {1,...,#1}{%
+     \pgfmathsetmacro{\sx}{rnd*16}\pgfmathsetmacro{\sy}{rnd*9}%
+     \pgfmathsetmacro{\sr}{0.005+rnd*0.020}\pgfmathsetmacro{\so}{0.10+rnd*0.55}%
+     \fill[white, opacity=\so] (\sx,\sy) circle (\sr);}}
+
+\newcommand{\rays}[3]{%
+  \begin{scope}[blend mode=screen]
+  \foreach \k in {1,...,#3}{%
+     \pgfmathsetmacro{\ang}{rnd*360}\pgfmathsetmacro{\len}{4.5+rnd*7}%
+     \pgfmathsetmacro{\wd}{0.4+rnd*1.4}%
+     \fill[#2, opacity=0.045, path fading=rglow]
+        #1 -- ($#1+(\ang-\wd:\len)$) -- ($#1+(\ang+\wd:\len)$) -- cycle;}
+  \end{scope}}
+
+\newcommand{\glowtext}[3]{%
+  \begin{scope}[blend mode=screen]
+     \fill[#2, opacity=0.55, path fading=rglow] #1 ellipse (5.2 and 1.5);
+  \end{scope}
+  \node at #1 {#3};}
+
+% nebula backdrop used by act cards / opener / finale
+\newcommand{\nebula}{%
+  \begin{scope}[blend mode=screen]
+     \fill[nviolet,opacity=0.40, path fading=rglow] (5.5,6) circle (6);
+     \fill[nmag,   opacity=0.28, path fading=rglow] (11,6) circle (4.8);
+     \fill[ncyan,  opacity=0.24, path fading=rglow] (9,3) circle (5.5);
+     \fill[indigo, opacity=0.55, path fading=rglow] (8,4.5) circle (9);
+  \end{scope}}
+
+% act-divider card: {numeral}{title}{subtitle}{accent}
+\newcommand{\actcard}[4]{%
+  \art{
+    \fill[midnight] (0,0) rectangle (16,9);
+    \nebula \dust{200}\bokeh{45}
+    \rays{(8,4.9)}{#4}{16}
+    \glowtext{(8,5.4)}{#4}{\fontsize{120}{120}\selectfont\textbf{\textcolor{white}{#1}}}
+    \node[text=paper] at (8,2.9) {\fontsize{26}{28}\selectfont\textbf{#2}};
+    \node[text=#4, opacity=0.95] at (8,2.0) {\large #3};
+  }}
+
+\begin{document}
+
+% =====================================================================
+% TITLE -- cold open
+% =====================================================================
+\art{
+  \fill[midnight] (0,0) rectangle (16,9);
+  \nebula \dust{230}\bokeh{60}
+  \coordinate (n1) at (3.6,7.0); \coordinate (n2) at (6.6,7.9);
+  \coordinate (n3) at (10.2,7.1);\coordinate (n4) at (2.8,4.9);
+  \coordinate (n5) at (6.2,5.3); \coordinate (n6) at (10.9,5.1);
+  \coordinate (n7) at (13.0,6.3);\coordinate (n8) at (8.3,3.7);
+  \coordinate (n9) at (4.9,3.2);
+  \foreach \a/\b/\c in {n1/n2/ncyan,n2/n3/nviolet,n1/n4/ncyan,n4/n5/eblue,
+     n5/n6/nmag,n3/n6/nviolet,n2/n5/ncyan,n6/n7/nmag,n5/n8/eblue,
+     n8/n9/ncyan,n4/n9/eblue,n9/n5/nviolet}{\neon{(\a)}{(\b)}{\c}}
+  \foreach \n/\c in {n1/ncyan,n2/nviolet,n3/nmag,n4/eblue,n5/nteal,
+     n6/npink,n7/gold,n8/eblue,n9/nviolet}{\spark{(\n)}{0.07}{\c}}
+  \begin{scope}[blend mode=screen]
+     \fill[ncyan, opacity=0.40, path fading=rglow] (5.7,1.8) ellipse (5.8 and 1.6);
+  \end{scope}
+  \node[anchor=west, text=white] at (1.3,2.15)
+    {\fontsize{46}{50}\selectfont\textbf{Rotor \textcolor{ncyan}{in} Rust}};
+  \node[anchor=west, text=paper, opacity=0.9] at (1.4,1.2)
+    {\large A story told in three parts.};
+  \node[anchor=west, text=paper, opacity=0.55] at (1.4,0.5)
+    {\footnotesize Jasmin Begi\'{c}\; \textcolor{nmag}{$\bullet$}\; Daniel Wassie};
+}
+
+% =====================================================================
+% ACT I
+% =====================================================================
+\actcard{I}{The Question}{symbolic execution --- asking one question of every input}{ncyan}
+
+% --- I.1  you cannot taste every dish -------------------------------
+\art{
+  \fill[midnight] (0,0) rectangle (16,9);
+  \begin{scope}[blend mode=screen]
+     \fill[indigo, opacity=0.5, path fading=rglow] (8,4.5) circle (9);
+     \fill[nmag,   opacity=0.5, path fading=rglow] (11.3,5.7) circle (4.5);
+  \end{scope}
+  \foreach \x in {0,...,37}{\foreach \y in {0,...,16}{
+     \pgfmathsetmacro{\jx}{\x*0.40+0.6+rnd*0.05}
+     \pgfmathsetmacro{\jy}{\y*0.40+1.5+rnd*0.05}
+     \fill[eblue!60!midnight, opacity={0.30+rnd*0.30}] (\jx,\jy) circle (0.045);}}
+  \dust{120}
+  \rays{(11.3,5.7)}{npink}{26}\spark{(11.3,5.7)}{0.12}{nmag}
+  \node[text=white] at (8,8.4) {\Large you cannot taste every dish --- the one that is wrong \textcolor{npink}{hides}};
+  \glowtext{(8,0.85)}{ncyan}{\fontsize{34}{36}\selectfont\textbf{\textcolor{ncyan}{$2^{64}$} \normalsize\textcolor{paper}{possible inputs}}}
+}
+
+% --- I.2  one question of all of them -------------------------------
+\art{
+  \fill[deepblue!85!black] (0,0) rectangle (16,9);
+  \begin{scope}[blend mode=screen]
+     \fill[royal, opacity=0.4, path fading=rglow] (8,7) circle (7);\end{scope}
+  \foreach \x in {0,...,37}{\foreach \y in {0,...,12}{
+     \pgfmathsetmacro{\jx}{\x*0.40+0.6}\pgfmathsetmacro{\jy}{\y*0.40+1.6}
+     \fill[ncyan, opacity={0.20+rnd*0.5}] (\jx,\jy) circle (0.05);}}
+  \begin{scope}[blend mode=screen]
+     \fill[ncyan, opacity=0.20, path fading=rglow] (8,8.4) -- (0.8,1.3) -- (15.2,1.3) -- cycle;
+     \fill[white, opacity=0.30, path fading=rglow] (8,8.4) -- (5.4,1.3) -- (10.6,1.3) -- cycle;
+  \end{scope}
+  \spark{(8,8.3)}{0.12}{ncyan}
+  \node[text=paper] at (8,0.7)
+    {\Large instead, one question covers \textcolor{ncyan}{every} input at once};
+}
+
+% --- I.3  the frozen command line opens -----------------------------
+\art{
+  \fill[deepblue!85!black] (0,0) rectangle (16,9);
+  \begin{scope}[blend mode=screen]
+     \fill[royal, opacity=0.5, path fading=rglow] (8,4.6) circle (8);\end{scope}
+  \dust{80}
+  \foreach \i/\open/\c in {0/0/faint,1/0/faint,2/1/ncyan,3/1/nmag,4/1/nlime,5/1/namber}{
+     \pgfmathsetmacro{\lx}{2.0+\i*2.35}
+     \ifnum\open=1
+        \fill[\c, opacity=0.5, path fading=rglow] (\lx,4.7) circle (1.5);
+        \begin{scope}[blend mode=screen]
+        \foreach \k in {1,...,7}{
+           \pgfmathsetmacro{\dy}{rnd*2.4}\pgfmathsetmacro{\dx}{(rnd-0.5)*0.7}
+           \fill[\c, opacity={0.5-0.15*rnd}, path fading=rglow] (\lx+\dx,5.4+\dy) circle (0.07);}
+        \end{scope}
+     \fi
+     \shade[top color=\c!75!deepblue, bottom color=\c!30!deepblue] (\lx-0.5,3.5) rectangle (\lx+0.5,4.7);
+     \draw[\c, line width=1.5pt] (\lx-0.5,3.5) rectangle (\lx+0.5,4.7);
+     \ifnum\open=1 \draw[\c, line width=1.6pt] (\lx-0.30,4.7) arc (200:20:0.36);
+     \else \draw[\c, line width=1.6pt] (\lx-0.30,4.7) arc (180:0:0.30);\fi
+     \fill[white] (\lx,4.1) circle (0.08);}
+  \node[text=paper] at (8,8.2) {\Large the command line: \textcolor{faint}{frozen} $\rightarrow$ \textcolor{ncyan}{open to the solver}};
+  \node[text=paper, opacity=0.85] at (8,2.0) {\large the bytes after the program's name become \textcolor{ncyan}{questions}};
+}
+
+% --- I.4  the secret revealed (X / Y) -------------------------------
+\art{
+  \fill[midnight] (0,0) rectangle (16,9);
+  \begin{scope}[blend mode=screen]
+     \fill[nmag, opacity=0.5, path fading=rglow] (8,5.0) circle (5.5);
+     \fill[royal,opacity=0.4, path fading=rglow] (8,5.0) circle (8);\end{scope}
+  \dust{80}
+  \foreach \dx/\ch/\c in {5.4/X/ncyan, 10.6/Y/nlime}{
+     \fill[\c, opacity=0.45, path fading=rglow] (\dx,5.1) circle (2.1);
+     \shade[inner color=\c!35!midnight, outer color=midnight] (\dx,5.1) circle (1.35);
+     \draw[\c, line width=2pt] (\dx,5.1) circle (1.35);
+     \draw[\c, line width=0.8pt, opacity=0.6] (\dx,5.1) circle (1.05);
+     \foreach \t in {0,15,...,345}{\draw[\c,opacity=0.55,line width=1pt]
+        ({\dx+1.16*cos(\t)},{5.1+1.16*sin(\t)}) -- ({\dx+1.35*cos(\t)},{5.1+1.35*sin(\t)});}
+     \node[text=white] at (\dx,5.1) {\fontsize{40}{42}\selectfont\textbf{\ch}};}
+  \rays{(8,5.1)}{gold}{30}
+  \begin{scope}[blend mode=screen]
+  \foreach \t in {0,18,...,342}{
+     \pgfmathsetmacro{\rr}{0.7+0.6*rnd}
+     \draw[namber,opacity=0.8,line width=1.2pt]
+        ({8+0.3*cos(\t)},{5.1+0.3*sin(\t)}) -- ({8+\rr*cos(\t)},{5.1+\rr*sin(\t)});}
+  \end{scope}
+  \spark{(8,5.1)}{0.10}{namber}
+  \node[text=paper] at (8,8.5) {\Large the program crashes only on \textcolor{ncyan}{X} and \textcolor{nlime}{Y} together};
+  \node[text=npink] at (8,1.2) {\large no keyboard could trigger it --- the solver found it by reason};
+}
+
+% =====================================================================
+% ACT II
+% =====================================================================
+\actcard{II}{The Craft}{three rotors --- the original C, the same C taught one trick, and Rust}{namber}
+
+% --- II.1  the speed -------------------------------------------------
+\art{
+  \fill[midnight] (0,0) rectangle (16,9);
+  \begin{scope}[blend mode=screen]
+     \fill[indigo, opacity=0.6, path fading=rglow] (8,4.5) circle (10);
+     \fill[namber, opacity=0.25, path fading=rglow] (13.4,4.9) circle (4.5);\end{scope}
+  \dust{120}
+  \begin{scope}[blend mode=screen]
+  \foreach \i in {1,...,40}{
+     \pgfmathsetmacro{\my}{1.2+rnd*7.2}\pgfmathsetmacro{\mx}{1+rnd*9}
+     \pgfmathsetmacro{\ml}{0.4+rnd*2.2}\pgfmathsetmacro{\mo}{0.05+rnd*0.18}
+     \fill[ncyan, opacity=\mo, path fading=rglow] (\mx,\my) ellipse ({\ml} and 0.02);}
+  \end{scope}
+  \begin{scope}[blend mode=screen]
+     \fill[namber, opacity=0.55, path fading=rglow]
+        (1.5,2.7) .. controls (6,3.4) and (10,4.2) .. (13.4,4.9)
+        .. controls (10,3.7) and (6,3.0) .. (1.5,2.5) -- cycle;
+     \fill[gold, opacity=0.5, path fading=rglow]
+        (4.5,3.3) .. controls (8,3.9) and (11,4.4) .. (13.4,4.9)
+        .. controls (11,4.1) and (8,3.6) .. (4.5,3.1) -- cycle;
+  \end{scope}
+  \rays{(13.5,4.9)}{gold}{22}\spark{(13.5,4.9)}{0.16}{namber}
+  \node[text=white] at (5.2,7.2) {\fontsize{70}{72}\selectfont\textbf{1000\textcolor{namber}{$\times$}}};
+  \node[text=paper, opacity=0.9] at (5.4,5.7) {\large faster --- and a jump that big deserves suspicion};
+  \node[text=paper, opacity=0.78] at (4.2,1.3)
+    {\footnotesize \textcolor{nred}{139\,s} $\rightarrow$ \textcolor{gold}{0.1\,s}
+     \qquad \textcolor{nred}{428\,MB} $\rightarrow$ \textcolor{gold}{20\,MB}};
+}
+
+% --- II.2  do not trust the number, count ---------------------------
+\art{
+  \fill[midnight] (0,0) rectangle (16,9);
+  \begin{scope}[blend mode=screen]
+     \fill[nred,  opacity=0.45, path fading=rglow] (4.4,4.6) circle (5);
+     \fill[ncyan, opacity=0.40, path fading=rglow] (11.6,2.4) circle (3.5);\end{scope}
+  \dust{90}
+  \begin{scope}[blend mode=screen]
+     \fill[nred, opacity=0.5, path fading=rglow] (4.4,4.6) ellipse (1.7 and 4.2);\end{scope}
+  \shade[bottom color=nred!70!black, top color=npink] (3.5,0.9) rectangle (5.3,8.3);
+  \draw[npink, line width=1pt, opacity=0.6] (3.5,0.9) rectangle (5.3,8.3);
+  \node[text=white, rotate=90, font=\footnotesize] at (4.4,4.6) {11{,}695{,}232{,}963 comparisons};
+  \spark{(11.6,2.4)}{0.13}{ncyan}
+  \node[text=ncyan, font=\footnotesize] at (11.6,3.4) {159{,}018 hash probes};
+  \node[text=paper] at (10.9,8.0) {\Large \textcolor{nred}{a list, walked}};
+  \node[text=paper] at (10.9,7.0) {\Large vs.\ \textcolor{ncyan}{an index}};
+  \node[text=paper, opacity=0.8] at (10.9,5.6) {\footnotesize same question, same answer};
+}
+
+% --- II.3  THE THREE ROTORS (the comparison) ------------------------
+\art{
+  \fill[midnight] (0,0) rectangle (16,9);
+  \begin{scope}[blend mode=screen]
+     \fill[indigo, opacity=0.55, path fading=rglow] (8,4.6) circle (9);
+     \fill[namber, opacity=0.18, path fading=rglow] (3.4,5.4) circle (3);
+     \fill[nviolet,opacity=0.18, path fading=rglow] (8,5.4) circle (3);
+     \fill[ncyan,  opacity=0.22, path fading=rglow] (12.6,5.4) circle (3);\end{scope}
+  \dust{80}
+  \node[text=paper] at (8,8.4) {\Large three rotors, one model --- the lesson travels};
+  % the journey arc
+  \draw[gold,  line width=2pt, opacity=0.5, -{Stealth[length=4mm]}]
+     (4.4,6.0) .. controls (6,7.0) and (7,7.0) .. (7.6,6.2);
+  \draw[ncyan, line width=2pt, opacity=0.5, -{Stealth[length=4mm]}]
+     (8.6,6.2) .. controls (10,7.0) and (11,7.0) .. (11.8,6.0);
+  % three pedestals
+  \foreach \x/\c/\name/\sub in {%
+      3.4/namber/{Original C}/{the master},
+      8.0/royal/{Hash-consed C}/{taught one trick},
+      12.6/ncyan/{Rust}/{the lesson, fully}}{
+     \fill[\c, opacity=0.5, path fading=rglow] (\x,5.4) circle (1.7);
+     \shade[inner color=white, outer color=\c!55!midnight] (\x,5.4) circle (0.92);
+     \draw[\c, line width=1.4pt] (\x,5.4) circle (0.92);
+     \node[text=paper, font=\small\bfseries] at (\x,3.9) {\name};
+     \node[text=\c, font=\footnotesize\itshape] at (\x,3.5) {\sub};
+     \draw[\c, line width=1pt, opacity=0.5] (\x-1.3,3.15) -- (\x+1.3,3.15);}
+  % stat rows
+  \node[text=paper, font=\footnotesize] at (3.4,2.75) {139\,s \;\textcolor{faint}{$\bullet$}\; 428\,MB};
+  \node[text=paper, font=\footnotesize] at (3.4,2.30) {3.17\,M lines built};
+  \node[text=paper, opacity=0.7, font=\scriptsize] at (3.4,1.9) {11.7\,billion compares};
+  \node[text=paper, font=\footnotesize] at (8.0,2.75) {1.5\,s \;\textcolor{faint}{$\bullet$}\; 485\,MB};
+  \node[text=paper, font=\footnotesize] at (8.0,2.30) {byte-identical output};
+  \node[text=nlime, opacity=0.95, font=\scriptsize] at (8.0,1.9) {95$\times$ \;\textcolor{faint}{$\bullet$}\; 36/36 equal};
+  \node[text=paper, font=\footnotesize] at (12.6,2.75) {0.1\,s \;\textcolor{faint}{$\bullet$}\; 20\,MB};
+  \node[text=paper, font=\footnotesize] at (12.6,2.30) {159\,k lines built};
+  \node[text=ncyan, opacity=0.95, font=\scriptsize] at (12.6,1.9) {1000$\times$ \;\textcolor{faint}{$\bullet$}\; 36/36 equal};
+  \node[text=paper, opacity=0.8] at (8,0.85)
+    {\footnotesize the speed was never the language --- it was \textcolor{ncyan}{one small thing, done well}};
+}
+
+% --- II.4  the same lesson, proved in C -----------------------------
+\art{
+  \fill[midnight] (0,0) rectangle (16,9);
+  \begin{scope}[blend mode=screen]
+     \fill[indigo, opacity=0.55, path fading=rglow] (8,4.7) circle (8);
+     \fill[namber, opacity=0.30, path fading=rglow] (3.9,4.7) circle (3.2);
+     \fill[ncyan,  opacity=0.30, path fading=rglow] (12.1,4.7) circle (3.2);\end{scope}
+  \dust{70}
+  \rays{(3.9,4.7)}{gold}{16}\rays{(12.1,4.7)}{ncyan}{16}
+  \shade[inner color=white, outer color=namber!70!black] (3.9,4.7) circle (1.05);
+  \node[text=midnight, font=\bfseries] at (3.9,4.7) {C};
+  \shade[inner color=white, outer color=ncyan!70!black] (12.1,4.7) circle (1.05);
+  \node[text=midnight, font=\bfseries] at (12.1,4.7) {C\,+\,hash};
+  \draw[white, line width=6pt, opacity=0.10] (5.0,4.7) -- (11.0,4.7);
+  \draw[nlime, line width=2.5pt, opacity=0.30,
+        decorate, decoration={random steps, segment length=5pt, amplitude=2pt}] (5.0,4.7) -- (11.0,4.7);
+  \draw[white, line width=1pt, opacity=0.85,
+        decorate, decoration={random steps, segment length=5pt, amplitude=2pt}] (5.0,4.7) -- (11.0,4.7);
+  \spark{(8,4.7)}{0.10}{nlime}
+  \node[text=paper] at (8,8.0) {\Large we carried the one trick back into the original itself};
+  \glowtext{(8,2.2)}{nlime}{\fontsize{38}{40}\selectfont\textbf{\textcolor{white}{95}\textcolor{ncyan}{$\times$} \normalsize\textcolor{paper}{, byte-identical}}}
+  \node[text=paper, opacity=0.8] at (8,1.2)
+    {\footnotesize ``perfection is lots of little things done well''};
+}
+
+% =====================================================================
+% ACT III
+% =====================================================================
+\actcard{III}{The Plate}{the visualizer --- an answer you can actually read}{nlime}
+
+% --- III.1  an answer nobody can read -------------------------------
+\art{
+  \fill[midnight] (0,0) rectangle (16,9);
+  \begin{scope}[blend mode=screen]
+     \fill[indigo, opacity=0.5, path fading=rglow] (8,4.5) circle (9);\end{scope}
+  \dust{60}
+  % a wall of unreadable digits
+  \begin{scope}
+  \foreach \r in {0,...,12}{
+     \pgfmathsetmacro{\ry}{7.7-\r*0.52}
+     \foreach \cc in {0,...,30}{
+        \pgfmathsetmacro{\cx}{1.2+\cc*0.46}
+        \pgfmathtruncatemacro{\bit}{rnd*1.999}
+        \node[text=faint, opacity={0.25+rnd*0.35}, font=\ttfamily\scriptsize] at (\cx,\ry) {\bit};}}
+  \end{scope}
+  \fill[midnight, opacity=0.55] (0,0) rectangle (16,9);
+  \node[text=paper] at (8,5.1) {\Large the solver's answer: \textcolor{faint}{thousands of lines of binary}};
+  \node[text=paper, opacity=0.8] at (8,4.2) {\large a correct answer nobody can read convinces nobody};
+}
+
+% --- III.2  made watchable ------------------------------------------
+\art{
+  \fill[midnight] (0,0) rectangle (16,9);
+  \begin{scope}[blend mode=screen]
+     \fill[nred,    opacity=0.40, path fading=rglow] (8,7.3) circle (3.5);
+     \fill[nviolet, opacity=0.35, path fading=rglow] (8,4) circle (7);\end{scope}
+  \dust{90}
+  \coordinate (top) at (8,6.7);
+  \coordinate (na) at (5.6,5.4); \coordinate (nb) at (10.4,5.4);
+  \coordinate (nc) at (3.4,3.6); \coordinate (nd) at (6.8,3.6);
+  \coordinate (ne) at (9.2,3.6); \coordinate (nf) at (12.2,3.6);
+  \coordinate (ng) at (4.8,1.9); \coordinate (nh) at (7.6,1.9);
+  \foreach \a/\b/\c in {top/na/nred, top/nb/nred, na/nc/ncyan, na/nd/nviolet,
+        nb/ne/ncyan, nb/nf/nlime, nd/ng/namber, nd/nh/nviolet}{\neon{(\a)}{(\b)}{\c}}
+  \rays{(8,7.4)}{nred}{20}
+  \node[star, star points=8, star point ratio=0.55, draw=nred, fill=nred!75!black,
+        line width=1.3pt, minimum size=1.7cm] at (8,7.4) {};
+  \node[text=white, font=\tiny\bfseries] at (8,7.4) {VIOLATED};
+  \foreach \n/\c in {na/ncyan, nb/nteal, nc/eblue, nd/nviolet, ne/eblue,
+        nf/nlime, ng/namber, nh/npink}{\spark{(\n)}{0.085}{\c}}
+  \node[text=paper] at (8,0.8) {\Large the same answer, \textcolor{nlime}{plated} --- a graph you can point at};
+}
+
+% =====================================================================
+% CLOSE
+% =====================================================================
+\art{
+  \fill[midnight] (0,0) rectangle (16,9);
+  \nebula
+  \begin{scope}[blend mode=screen]
+  \foreach \x/\c/\o in {2.5/ngreen/0.22, 4/nteal/0.18, 5.8/ncyan/0.20,
+        9.5/nviolet/0.18, 11.5/nmag/0.16, 13.5/royal/0.18}{
+     \fill[\c, opacity=\o, path fading=fadeup] (\x-0.7,4.5) rectangle (\x+0.7,9);}
+  \end{scope}
+  \dust{240}\bokeh{55}
+  \coordinate (r1) at (4.6,6.3);\coordinate (r2) at (8.2,7.0);\coordinate (r3) at (11.4,5.6);
+  \neon{(r1)}{(r2)}{ncyan}\neon{(r2)}{(r3)}{nmag}
+  \spark{(r1)}{0.09}{ncyan}\spark{(r2)}{0.09}{npink}\spark{(r3)}{0.09}{nlime}
+  \begin{scope}[blend mode=screen]
+     \fill[ncyan, opacity=0.40, path fading=rglow] (8,3.55) ellipse (6 and 1.4);\end{scope}
+  \node[text=white] at (8,3.6) {\fontsize{27}{31}\selectfont\textbf{proving it still tells the truth}};
+  \node[text=paper, opacity=0.85] at (8,2.6) {\large was the whole craft. Thank you.};
+  \node[text=paper, opacity=0.6] at (8,1.4)
+    {\footnotesize github.com/jaspek/rotor-rust \;\textcolor{nmag}{$\bullet$}\; rotor-c-hashcons
+     \;\textcolor{nmag}{$\bullet$}\; jaspek.github.io/rotor-rust};
+}
+
+\end{document}
