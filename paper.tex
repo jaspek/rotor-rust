@@ -132,7 +132,10 @@ introduced during development was caught by it.
         profiling methodology, that fully attributes the performance
         difference between the two generators and uncovers an
         architectural difference in \emph{when} each tool deduplicates
-        (Section~\ref{sec:performance}).
+        (Section~\ref{sec:performance}); we close the argument by porting
+        the optimisation \emph{back into the reference C}, where it is
+        $\sim$95$\times$ faster with byte-identical output
+        (Section~\ref{sec:backport}).
   \item An interactive, browser-based witness visualizer
         (Section~\ref{sec:visualizer}).
 \end{itemize}
@@ -141,11 +144,13 @@ introduced during development was caught by it.
 implementation, the validation harness with both result tables, the C
 reference models with their generation commands recorded in file
 headers, a reproducible Docker setup for the model checker and for the
-crash described in Section~\ref{sec:cse}, and the visualizer with
-twelve preloaded examples:
+crash described in Section~\ref{sec:cse}, the hash-consing back-port of
+the reference C (full source, unified diffs, and its own differential
+validation), and the visualizer with twelve preloaded examples:
 \begin{center}
 \footnotesize
 \url{https://github.com/jaspek/rotor-rust}\\
+\url{https://github.com/jaspek/rotor-c-hashcons}\\
 \url{https://jaspek.github.io/rotor-rust/}
 \end{center}
 
@@ -647,6 +652,44 @@ optimisation. We reported the crash with a complete reproduction
 comparison when pointers differ, or always reuse sort lines regardless
 of the flag.
 
+\subsection{Porting the optimisation back to C}
+\label{sec:backport}
+
+The cleanest test of the claim ``the speed-up is the data structure, not
+the language'' is to make the change \emph{in the reference itself}. We
+applied exactly the hash-consing transformation to the reference's
+\texttt{tools/rotor.c} --- replacing the linear \texttt{find\_equal\_line}
+scan with an $O(1)$ hash-table probe over the same five identity fields,
+probing before allocating so a duplicate line is never constructed --- as a
+$\sim$70-line patch that leaves every other line of the 14k-line file
+untouched. Two variants, both in C: a \emph{byte-identical} one that keeps
+the reference's exact reuse decisions, and a \emph{dedup-everywhere} one
+mirroring the Rust generator's rule (deduplicate every node except
+states, inputs, init/next, and properties).
+
+The byte-identical C rotor generates selfie's model in \textbf{1.5\,s}
+instead of \textbf{139\,s} ($\sim$95$\times$), producing output that
+\texttt{diff} reports identical to the baseline on all 18 benchmarks and on
+selfie (modulo the executable name in one header comment). Same source, same
+output, same compiler --- two orders of magnitude faster from one data
+structure, with the language held fixed. The dedup-everywhere variant
+produces a \emph{smaller} model (selfie: 99k lines vs.\ the baseline's 139k)
+and passes the same differential criterion as Section~\ref{sec:validation}:
+\textbf{36/36} paired verdicts identical to the baseline across the 18
+benchmarks under both exit-code settings.
+
+The exercise also confirmed Section~\ref{sec:cse}'s diagnosis empirically. A
+\emph{naive} ``deduplicate everything'' --- without the exceptions --- yields
+a model in which every benchmark reports a spurious bad state at bound~0,
+because the reference deliberately keeps its per-segment address and array
+sorts unique (the regions guarded by \texttt{reuse\_lines = 0}); merging them
+corrupts the initial state. Universal hash-consing of the \emph{remaining}
+nodes is safe, and, as a side effect, makes the sort pointer-invariant hold
+everywhere, so the back-ported rotor no longer crashes with reuse forced on
+--- realising one of the fixes we proposed. The byte-identity check caught
+the naive version immediately; the principled rule is what the differential
+criterion then certified.
+
 \subsection{Output size}
 \label{sec:size}
 
@@ -725,7 +768,11 @@ demanding identical (property, minimal-bound) verdicts from an
 independent model checker across 36 paired runs, it caught every
 modeling defect we introduced, one crash in the reference tool, and one
 bug in our own measurement harness --- and its final, fully green table
-is the precise sense in which the two generators are equivalent.
+is the precise sense in which the two generators are equivalent. The same
+methodology certified the optimisation a second time, after we carried it
+back into the reference C: there it is $\sim$95$\times$ faster with
+byte-identical output, which settles the cause as the data structure and
+not the language.
 
 Future work includes symbolic argument \emph{count} and packed string
 layouts, symbolic environment variables and file contents, extending
