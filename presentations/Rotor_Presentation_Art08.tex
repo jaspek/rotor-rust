@@ -191,9 +191,12 @@
   \draw[pen2] (8,5.6) circle (0.7);
   \begin{scope}\clip (8,5.6) circle (0.7);
      \hatch{20}{0.12}{0.35pt}{inkl}\end{scope}
-  \foreach \a in {0,15,...,345}{
-     \draw[penf] (8,5.6)+(\a:0.85) -- +(\a:{1.0+0.7*abs(sin(\a*3))});}
-  \foreach \x in {2.4,3.2,...,13.6}{\draw[penf, inkl] (8,5.6) -- (\x,3.0);}
+  % short rays crown the upper half of the disc
+  \foreach \a in {18,36,...,162}{
+     \draw[penf] (8,5.6)+(\a:0.85) -- +(\a:{1.1+0.4*abs(sin(\a*3))});}
+  % light falls below: beams start at the lower rim (never crossing the disc)
+  \foreach \x in {2.4,3.2,...,13.6}{
+     \draw[penf, inkl] ($(8,5.6)!0.82cm!(\x,3.0)$) -- (\x,3.0);}
   \platecap{can it reach a bad state, for \emph{any} input, within $k$ steps? --- one query covers them all}
 }
 
@@ -346,6 +349,48 @@
 }
 
 % =====================================================================
+% 9b. WITHDRAW THE SHARING  (dedup off; colour 80)
+% =====================================================================
+\art{
+  \setsat{80}
+  \platetitle{Withdraw the Sharing}
+  \def\cy{4.7}
+  % ---- left: the fractured casting (C) ----
+  \def\lx{4.5}
+  \coordinate (TL) at (\lx-0.85,\cy+1.15);\coordinate (TR) at (\lx+0.85,\cy+1.15);
+  \coordinate (SR) at (\lx+1.25,\cy+0.5); \coordinate (CU) at (\lx,\cy-1.7);
+  \coordinate (SL) at (\lx-1.25,\cy+0.5);
+  \begin{scope}\clip (TL)--(TR)--(SR)--(CU)--(SL)--cycle;
+     \wfill{wred}{0.5}
+     \begin{scope}\clip (\lx-1.3,\cy-1.7) rectangle (\lx+1.3,\cy+0.5);
+        \hatch{32}{0.1}{0.4pt}{ink}\hatch{-34}{0.13}{0.4pt}{ink}\end{scope}
+  \end{scope}
+  \draw[pen2] (TL)--(TR)--(SR)--(CU)--(SL)--cycle;
+  \draw[pen] (SL)--(SR);
+  \draw[pen2] (\lx-1.0,\cy+0.7) -- (\lx-0.1,\cy+0.2) -- (\lx+0.4,\cy-0.4) -- (\lx+1.1,\cy-0.7);
+  \draw[pen] (\lx+0.1,\cy+1.15) -- (\lx-0.15,\cy+0.2) -- (\lx+0.25,\cy-0.8);
+  % a shard chipped free, upper right
+  \draw[pen2] (\lx+0.85,\cy+1.15) -- (\lx+1.45,\cy+1.5) -- (\lx+1.6,\cy+1.0) -- (\lx+1.25,\cy+0.5);
+  \node[ink, lab] at (\lx,\cy-2.35) {\scshape C: it shatters};
+  % ---- right: the sound casting (Rust) ----
+  \def\rx{11.5}
+  \coordinate (tl) at (\rx-0.85,\cy+1.15);\coordinate (tr) at (\rx+0.85,\cy+1.15);
+  \coordinate (sr) at (\rx+1.25,\cy+0.5); \coordinate (cu) at (\rx,\cy-1.7);
+  \coordinate (sl) at (\rx-1.25,\cy+0.5);
+  \begin{scope}\clip (tl)--(tr)--(sr)--(cu)--(sl)--cycle;
+     \wfill{wteal}{0.55}
+     \begin{scope}\clip (\rx,\cy-1.7) rectangle (\rx+1.3,\cy+0.5);
+        \hatch{-28}{0.12}{0.4pt}{inkl}\end{scope}
+  \end{scope}
+  \draw[pen2] (tl)--(tr)--(sr)--(cu)--(sl)--cycle;
+  \draw[pen] (sl)--(sr);
+  \draw[pen] (tl)--(cu) (tr)--(cu) (\rx,\cy+1.15)--(\rx,\cy-1.7);
+  \fill[paper] (\rx-0.45,\cy+0.72) circle (0.15);
+  \node[ink, lab] at (\rx,\cy-2.35) {\scshape Rust: it holds};
+  \platecap{switch off the line-reuse --- load-bearing in C, merely cosmetic in Rust}
+}
+
+% =====================================================================
 % 10. THE BACK-PORT  (colour 84)
 % =====================================================================
 \art{
@@ -387,6 +432,32 @@
   \node[inkl] at (3.9,3.1) {\footnotesize frozen};
   \draw[pen,-{Stealth[length=2.4mm]}] (5.6,4.2) -- (7.4,4.2);
   \platecap{the words after the program's name --- once fixed, now free for the solver to choose}
+}
+
+% =====================================================================
+% 11b. THE SECRET, FOUND BY REASON  (X/Y; colour 92)
+% =====================================================================
+\art{
+  \setsat{92}
+  \platetitle{The Secret, Found by Reason}
+  \foreach \dx/\ch/\an in {5.2/X/1, 10.8/Y/2}{
+     \begin{scope}\clip (\dx,4.8) circle (1.35);
+        \wfill{wgold}{0.5}
+        \begin{scope}\clip (\dx-1.4,3.45) rectangle (\dx+1.4,4.8);
+           \hatch{-28}{0.12}{0.4pt}{inkl}\end{scope}\end{scope}
+     \draw[pen2] (\dx,4.8) circle (1.35);
+     \draw[penf] (\dx,4.8) circle (1.1);
+     \foreach \t in {0,15,...,345}{\draw[pen] ($(\dx,4.8)+(\t:1.1)$) -- ($(\dx,4.8)+(\t:1.32)$);}
+     % pointer mark at the top
+     \fill[ink] ($(\dx,4.8)+(90:1.46)$) -- ($(\dx,4.8)+(84:1.18)$) -- ($(\dx,4.8)+(96:1.18)$) -- cycle;
+     % central disc with the value it landed on
+     \fill[paper] (\dx,4.8) circle (0.56);\draw[pen2] (\dx,4.8) circle (0.56);
+     \node[ink] at (\dx,4.8) {\fontsize{30}{32}\selectfont \ch};
+     \node[ink, lab] at (\dx,2.95) {\scshape arg \an\ reads \ch};}
+  % the lock clicks open between the dials
+  \foreach \a in {0,30,...,330}{\draw[penf] (8,4.8)+(\a:0.18) -- +(\a:0.5);}
+  \node[ink, lab] at (8,3.7) {\footnotesize\itshape it opens};
+  \platecap{it crashes only when both land at once --- no keyboard could find it; the solver did}
 }
 
 % =====================================================================
