@@ -1,0 +1,342 @@
+\documentclass[aspectratio=169]{beamer}
+
+% ============================================================
+% ART DECK -- image-only, fully illustrated companion.
+% Every slide is a full-bleed TikZ composition on the true
+% 16cm x 9cm (16:9) canvas: gradients, glow, neon, metaphor.
+% ============================================================
+
+\usepackage{tikz}
+\usepackage[T1]{fontenc}
+\usetikzlibrary{shadings, fadings, shapes.geometric, shapes.misc,
+  decorations.pathmorphing, calc, backgrounds, positioning, arrows.meta}
+
+\usetheme{default}
+\setbeamertemplate{navigation symbols}{}
+\setbeamercolor{background canvas}{bg=black}
+\setbeamertemplate{footline}{}
+
+\definecolor{indigo}{HTML}{2A1A5E}
+\definecolor{deepblue}{HTML}{0E1B3D}
+\definecolor{midnight}{HTML}{091226}
+\definecolor{ncyan}{HTML}{2FE3FF}
+\definecolor{nmag}{HTML}{FF3DAE}
+\definecolor{nlime}{HTML}{B6FF3D}
+\definecolor{namber}{HTML}{FFC23D}
+\definecolor{eblue}{HTML}{4D7CFF}
+\definecolor{nviolet}{HTML}{9A5BFF}
+\definecolor{ngreen}{HTML}{36E08B}
+\definecolor{nred}{HTML}{FF4D5E}
+\definecolor{faint}{HTML}{6E7E92}
+\definecolor{paper}{HTML}{EAF2FB}
+
+\pgfmathsetseed{20260624}
+
+% Canvas is (0,0) bottom-left to (16,9) top-right.
+\newcommand{\art}[1]{%
+  \begin{frame}[plain]
+  \begin{tikzpicture}[remember picture, overlay,
+      shift={(current page.south west)}, x=1cm, y=1cm]
+    #1
+  \end{tikzpicture}
+  \end{frame}}
+
+\newcommand{\glow}[3]{%
+  \foreach \gr/\go in {1/0.05, 0.72/0.10, 0.48/0.22, 0.27/0.55}{%
+    \fill[#2, opacity=\go] #1 circle ({\gr*#3});}}
+
+\newcommand{\stars}[1]{%
+  \foreach \i in {1,...,#1}{%
+    \pgfmathsetmacro{\sx}{rnd*16}\pgfmathsetmacro{\sy}{rnd*9}%
+    \pgfmathsetmacro{\sr}{0.006+rnd*0.022}%
+    \pgfmathsetmacro{\so}{0.12+rnd*0.45}%
+    \fill[white, opacity=\so] (\sx,\sy) circle (\sr);}}
+
+\begin{document}
+
+% =====================================================================
+% 1. COVER -- a luminous network
+% =====================================================================
+\art{
+  \fill[deepblue!85!black] (0,0) rectangle (16,9);
+  \glow{(8,5)}{indigo}{8.5}
+  \stars{170}
+  \coordinate (n1) at (3.6,7.0); \coordinate (n2) at (6.6,7.8);
+  \coordinate (n3) at (10.2,7.1);\coordinate (n4) at (2.8,4.8);
+  \coordinate (n5) at (6.2,5.3); \coordinate (n6) at (10.9,5.1);
+  \coordinate (n7) at (13.0,6.3);\coordinate (n8) at (8.3,3.6);
+  \coordinate (n9) at (4.9,3.1);
+  \foreach \a/\b/\c in {n1/n2/ncyan,n2/n3/nviolet,n1/n4/ncyan,n4/n5/eblue,
+     n5/n6/nmag,n3/n6/nviolet,n2/n5/ncyan,n6/n7/nmag,n5/n8/eblue,
+     n8/n9/ncyan,n4/n9/eblue,n9/n5/nviolet}{
+     \draw[\c, opacity=0.45, line width=0.8pt] (\a)--(\b);}
+  \foreach \n/\c in {n1/ncyan,n2/nviolet,n3/nmag,n4/eblue,n5/ncyan,
+     n6/nmag,n7/namber,n8/eblue,n9/nviolet}{
+     \glow{(\n)}{\c}{0.5}\fill[white] (\n) circle (0.06);}
+  \node[anchor=west, text=paper] at (1.4,2.0)
+    {\fontsize{44}{48}\selectfont\textbf{Rotor \textcolor{ncyan}{in} Rust}};
+  \node[anchor=west, text=paper, opacity=0.82] at (1.45,1.05)
+    {\large Models that ask one question of every input.};
+  \node[anchor=west, text=paper, opacity=0.5] at (1.45,0.45)
+    {\footnotesize Jasmin Begi\'{c}\; \textcolor{nmag}{$\cdot$}\; Daniel Wassie};
+}
+
+% =====================================================================
+% 2. THE PROBLEM -- a vast field, one glowing input
+% =====================================================================
+\art{
+  \fill[midnight] (0,0) rectangle (16,9);
+  \glow{(11.4,5.9)}{nmag}{5}
+  \foreach \x in {0,...,37}{\foreach \y in {0,...,16}{
+     \pgfmathsetmacro{\jx}{\x*0.40+0.6+rnd*0.05}
+     \pgfmathsetmacro{\jy}{\y*0.40+1.6+rnd*0.05}
+     \fill[eblue!55!midnight, opacity=0.45] (\jx,\jy) circle (0.045);}}
+  \glow{(11.4,5.9)}{nmag}{0.95}
+  \fill[white] (11.4,5.9) circle (0.09);
+  \node[text=paper] at (8,8.4) {\Large the one input that crashes \textcolor{nmag}{hides} among};
+  \node[text=ncyan] at (8,0.7) {\fontsize{34}{36}\selectfont\textbf{$2^{64}$ \normalsize\textcolor{paper}{possibilities}}};
+}
+
+% =====================================================================
+% 3. VERIFICATION -- one beam covers them all
+% =====================================================================
+\art{
+  \fill[deepblue!80!black] (0,0) rectangle (16,9);
+  \foreach \x in {0,...,37}{\foreach \y in {0,...,13}{
+     \pgfmathsetmacro{\jx}{\x*0.40+0.6}
+     \pgfmathsetmacro{\jy}{\y*0.40+1.6}
+     \fill[ncyan, opacity={0.22+rnd*0.5}] (\jx,\jy) circle (0.05);}}
+  \shade[left color=ncyan, right color=ncyan!0, opacity=0.16]
+     (8,8.7) -- (1.2,1.4) -- (14.8,1.4) -- cycle;
+  \glow{(8,8.3)}{ncyan}{1.15}
+  \fill[white] (8,8.3) circle (0.10);
+  \node[text=paper] at (8,0.7)
+    {\Large one question $\Rightarrow$ \textcolor{ncyan}{every} input, at once};
+}
+
+% =====================================================================
+% 4. THE PIPELINE -- flowing light
+% =====================================================================
+\art{
+  \fill[midnight] (0,0) rectangle (16,9);
+  \glow{(8,4.6)}{indigo}{7.5}
+  \stars{70}
+  \def\sy{4.6}
+  \foreach \x/\lbl/\c/\ours in {2.2/binary/eblue/0, 6.0/model/ncyan/1,
+        9.8/solver/nviolet/0, 13.4/answer/nlime/1}{
+     \glow{(\x,\sy)}{\c}{1.0}
+     \fill[\c!25!midnight] (\x,\sy) circle (0.68);
+     \draw[\c, line width={1.4pt}, opacity={0.5+0.5*\ours}] (\x,\sy) circle (0.68);
+     \node[text=paper] at (\x,\sy) {\footnotesize \lbl};}
+  \foreach \a/\b/\c in {2.2/6.0/ncyan, 6.0/9.8/nviolet, 9.8/13.4/nlime}{
+     \draw[\c, line width=2pt, opacity=0.55, -{Stealth[length=3mm]}]
+        (\a+0.78,\sy) -- (\b-0.78,\sy);}
+  \node[text=paper, opacity=0.85] at (8,8.0)
+    {\Large from a \textcolor{eblue}{compiled binary} to a \textcolor{nlime}{readable answer}};
+  \node[text=ncyan] at (6.0,3.3) {\footnotesize\textbf{rotor}};
+  \node[text=nlime] at (13.4,3.3){\footnotesize\textbf{visualizer}};
+}
+
+% =====================================================================
+% 5. SPEED -- a comet
+% =====================================================================
+\art{
+  \shade[inner color=indigo, outer color=midnight] (8,4.5) circle (10);
+  \stars{90}
+  \shade[left color=namber!0, right color=namber, opacity=0.5]
+     (1.6,2.9) .. controls (6,3.5) and (10,4.2) .. (13.4,4.9) --
+     (13.4,4.5) .. controls (10,3.8) and (6,3.1) .. (1.6,2.5) -- cycle;
+  \glow{(13.5,4.9)}{namber}{1.25}
+  \fill[white] (13.5,4.9) circle (0.13);
+  \node[text=white] at (5.4,7.3) {\fontsize{64}{66}\selectfont\textbf{1000\textcolor{namber}{$\times$}}};
+  \node[text=paper, opacity=0.85] at (5.6,5.9) {\large faster model generation};
+  \node[text=paper, opacity=0.72] at (4.0,1.4)
+    {\footnotesize \textcolor{nred}{139\,s} $\rightarrow$ \textcolor{namber}{0.1\,s}
+     \quad\textcolor{nred}{428\,MB} $\rightarrow$ \textcolor{namber}{20\,MB}};
+}
+
+% =====================================================================
+% 6. THE COUNTING -- towering scale
+% =====================================================================
+\art{
+  \fill[midnight] (0,0) rectangle (16,9);
+  \glow{(4.2,4.7)}{nred}{3.5}
+  \shade[bottom color=nred!90!black, top color=nmag] (3.2,0.9) rectangle (5.2,8.2);
+  \node[text=white, rotate=90] at (4.2,4.5) {\footnotesize 11{,}695{,}232{,}963 comparisons};
+  \glow{(11.4,1.9)}{ncyan}{0.95}
+  \fill[white] (11.4,1.9) circle (0.10);
+  \node[text=ncyan] at (11.4,2.9) {\footnotesize 159{,}018 hash probes};
+  \node[text=paper] at (10.6,7.9) {\Large \textcolor{nred}{a list walk}};
+  \node[text=paper] at (10.6,7.0) {\Large vs.\ \textcolor{ncyan}{an index}};
+}
+
+% =====================================================================
+% 7. DEDUP OFF -- shatter vs calm
+% =====================================================================
+\art{
+  \fill[deepblue!75!black] (0,0) rectangle (16,9);
+  \glow{(4.2,4.7)}{nred}{2.4}
+  \fill[nred!75!black] (4.2,6.4) -- (3.0,4.4) -- (3.8,2.5) -- (4.8,2.7)
+     -- (5.5,4.7) -- cycle;
+  \draw[white, opacity=0.85, line width=1pt] (4.2,6.4) -- (3.9,4.2);
+  \draw[white, opacity=0.85, line width=1pt] (3.0,4.4) -- (4.3,3.8);
+  \draw[white, opacity=0.85, line width=1pt] (5.5,4.7) -- (3.9,4.2);
+  \draw[white, opacity=0.85, line width=1pt] (3.8,2.5) -- (4.5,4.4);
+  \node[text=white] at (4.2,1.5) {\footnotesize \textbf{C: crashes}};
+  \glow{(11.6,4.7)}{ncyan}{2.4}
+  \shade[inner color=white, outer color=eblue]
+     (11.6,6.3) -- (10.4,4.6) -- (11.6,2.8) -- (12.8,4.6) -- cycle;
+  \node[text=white] at (11.6,1.5) {\footnotesize \textbf{Rust: unchanged}};
+  \node[text=paper] at (8,8.3) {\Large turn off the duplicate check\dots};
+}
+
+% =====================================================================
+% 8. THE BACK-PORT -- one spark, both ignite
+% =====================================================================
+\art{
+  \fill[midnight] (0,0) rectangle (16,9);
+  \glow{(8,4.8)}{namber}{3.5}
+  \glow{(3.8,4.8)}{namber}{1.4}
+  \fill[namber!30!midnight] (3.8,4.8) circle (1.0);
+  \draw[namber, line width=1.6pt] (3.8,4.8) circle (1.0);
+  \node[text=white] at (3.8,4.8) {\small Rust};
+  \glow{(12.2,4.8)}{ncyan}{1.4}
+  \fill[ncyan!25!midnight] (12.2,4.8) circle (1.0);
+  \draw[ncyan, line width=1.6pt] (12.2,4.8) circle (1.0);
+  \node[text=white] at (12.2,4.8) {\small C};
+  \draw[white, opacity=0.5, line width=1pt, dash pattern=on 1pt off 3pt]
+     (4.9,4.8) -- (11.1,4.8);
+  \glow{(8,4.8)}{nlime}{0.7}
+  \fill[white] (8,4.8) circle (0.10);
+  \node[text=paper] at (8,8.0) {\Large the same idea, carried back into C};
+  \node[text=nlime] at (8,2.2)
+    {\fontsize{34}{36}\selectfont\textbf{95\textcolor{ncyan}{$\times$}}};
+  \node[text=paper, opacity=0.72] at (8,1.3)
+    {\footnotesize byte-identical \;$\cdot$\; 36/36 equivalent};
+}
+
+% =====================================================================
+% 9. SYMBOLIC ARGV -- locks open
+% =====================================================================
+\art{
+  \fill[deepblue!80!black] (0,0) rectangle (16,9);
+  \glow{(8,4.6)}{indigo}{7.5}
+  \foreach \i/\open/\c in {0/0/faint,1/0/faint,2/1/ncyan,3/1/nmag,4/1/nlime,5/1/namber}{
+     \pgfmathsetmacro{\lx}{2.0+\i*2.35}
+     \ifnum\open=1 \glow{(\lx,4.7)}{\c}{1.0}\fi
+     \fill[\c!35!deepblue] (\lx-0.5,3.5) rectangle (\lx+0.5,4.7);
+     \draw[\c, line width=1.5pt] (\lx-0.5,3.5) rectangle (\lx+0.5,4.7);
+     \ifnum\open=1
+        \draw[\c, line width=1.5pt] (\lx-0.30,4.7) arc (200:20:0.36);
+     \else
+        \draw[\c, line width=1.5pt] (\lx-0.30,4.7) arc (180:0:0.30);
+     \fi
+     \fill[white] (\lx,4.1) circle (0.08);}
+  \node[text=paper] at (8,8.2) {\Large the command line: \textcolor{faint}{frozen} $\rightarrow$ \textcolor{ncyan}{open}};
+  \node[text=paper, opacity=0.82] at (8,2.2)
+    {\large the solver fills the open bytes};
+}
+
+% =====================================================================
+% 10. THE X / Y SECRET -- dials + burst
+% =====================================================================
+\art{
+  \fill[midnight] (0,0) rectangle (16,9);
+  \glow{(8,5.0)}{nmag}{4.5}
+  \foreach \dx/\ch/\c in {5.4/X/ncyan, 10.6/Y/nlime}{
+     \glow{(\dx,5.1)}{\c}{1.6}
+     \fill[\c!20!midnight] (\dx,5.1) circle (1.35);
+     \draw[\c, line width=1.8pt] (\dx,5.1) circle (1.35);
+     \foreach \t in {0,30,...,330}{\draw[\c,opacity=0.5,line width=1pt]
+        ({\dx+1.12*cos(\t)},{5.1+1.12*sin(\t)}) --
+        ({\dx+1.35*cos(\t)},{5.1+1.35*sin(\t)});}
+     \node[text=white] at (\dx,5.1) {\fontsize{38}{40}\selectfont\textbf{\ch}};}
+  \foreach \t in {0,24,...,336}{
+     \pgfmathsetmacro{\rr}{0.75+0.5*rnd}
+     \draw[namber,opacity=0.7,line width=1pt]
+        ({8+0.3*cos(\t)},{5.1+0.3*sin(\t)}) --
+        ({8+\rr*cos(\t)},{5.1+\rr*sin(\t)});}
+  \node[text=paper] at (8,8.5) {\Large two letters, two arguments --- found by logic};
+  \node[text=nmag] at (8,1.3) {\large the planted secret, recovered in seconds};
+}
+
+% =====================================================================
+% 11. 36 / 36 -- a radiant grid of checks
+% =====================================================================
+\art{
+  \fill[deepblue!70!black] (0,0) rectangle (16,9);
+  \glow{(8,5.2)}{ngreen}{7.5}
+  \foreach \r in {0,...,3}{\foreach \cc in {0,...,8}{
+     \pgfmathsetmacro{\cx}{2.6+\cc*1.35}
+     \pgfmathsetmacro{\cy}{6.4-\r*1.0}
+     \glow{(\cx,\cy)}{ngreen}{0.42}
+     \draw[white, line width=1.6pt, line cap=round]
+        (\cx-0.18,\cy) -- (\cx-0.04,\cy-0.15) -- (\cx+0.22,\cy+0.2);}}
+  \node[text=white] at (8,1.5)
+    {\fontsize{44}{46}\selectfont\textbf{36 \textcolor{ngreen}{/} 36}};
+  \node[text=paper, opacity=0.8] at (8,0.7)
+    {\footnotesize same bug, same step --- both tools, every benchmark};
+}
+
+% =====================================================================
+% 12. THE VISUALIZER -- an artful model graph
+% =====================================================================
+\art{
+  \fill[midnight] (0,0) rectangle (16,9);
+  \glow{(8,7.3)}{nred}{2.6}
+  \node[star, star points=8, star point ratio=0.6, draw=nred, fill=nred!70!black,
+        line width=1.2pt, minimum size=1.6cm] (bad) at (8,7.4) {};
+  \node[text=white, font=\tiny] at (8,7.4) {VIOLATED};
+  \coordinate (top) at (8,6.7);
+  \coordinate (na) at (5.6,5.4); \coordinate (nb) at (10.4,5.4);
+  \coordinate (nc) at (3.4,3.6); \coordinate (nd) at (6.8,3.6);
+  \coordinate (ne) at (9.2,3.6); \coordinate (nf) at (12.2,3.6);
+  \coordinate (ng) at (4.8,1.9); \coordinate (nh) at (7.6,1.9);
+  \foreach \a/\b in {top/na, top/nb, na/nc, na/nd, nb/ne, nb/nf, nd/ng, nd/nh}{
+     \draw[white, opacity=0.35, line width=1pt] (\a) -- (\b);}
+  \foreach \n/\c in {na/ncyan, nb/ncyan, nc/eblue, nd/nviolet, ne/eblue,
+        nf/nlime, ng/namber, nh/nviolet}{
+     \glow{(\n)}{\c}{0.45}\fill[\c] (\n) circle (0.17); \fill[white] (\n) circle (0.05);}
+  \node[text=paper] at (8,0.8) {\Large the unreadable answer, made \textcolor{nlime}{watchable}};
+}
+
+% =====================================================================
+% 13. THE LESSON -- a luminous shield
+% =====================================================================
+\art{
+  \shade[inner color=indigo, outer color=midnight] (8,4.5) circle (10);
+  \stars{80}
+  \glow{(8,5.1)}{ncyan}{3.2}
+  \shade[inner color=ncyan!40, outer color=eblue!60!midnight]
+     (8,7.7) -- (5.9,6.6) -- (5.9,3.9)
+     .. controls (5.9,2.7) and (7.0,2.2) .. (8,1.7)
+     .. controls (9.0,2.2) and (10.1,2.7) .. (10.1,3.9)
+     -- (10.1,6.6) -- cycle;
+  \draw[ncyan, line width=1.6pt]
+     (8,7.7) -- (5.9,6.6) -- (5.9,3.9)
+     .. controls (5.9,2.7) and (7.0,2.2) .. (8,1.7)
+     .. controls (9.0,2.2) and (10.1,2.7) .. (10.1,3.9)
+     -- (10.1,6.6) -- cycle;
+  \draw[white, line width=2pt, line cap=round]
+     (7.3,4.7) -- (7.8,3.9) -- (8.9,5.7);
+  \node[text=paper] at (8,0.95)
+    {\large the hard part is \textcolor{ncyan}{proving it still tells the truth}};
+}
+
+% =====================================================================
+% 14. FINALE -- a constellation
+% =====================================================================
+\art{
+  \fill[deepblue!85!black] (0,0) rectangle (16,9);
+  \glow{(8,5.0)}{nviolet}{8.5}
+  \stars{190}
+  \coordinate (r1) at (4.6,6.2);\coordinate (r2) at (8.2,6.9);\coordinate (r3) at (11.4,5.5);
+  \draw[ncyan, opacity=0.5, line width=1pt] (r1)--(r2)--(r3);
+  \foreach \n/\c in {r1/ncyan,r2/nmag,r3/nlime}{
+     \glow{(\n)}{\c}{0.6}\fill[white] (\n) circle (0.08);}
+  \node[text=paper] at (8,3.3) {\fontsize{44}{48}\selectfont\textbf{Thank you}};
+  \node[text=paper, opacity=0.6] at (8,2.2)
+    {\footnotesize github.com/jaspek/rotor-rust \;$\cdot$\; rotor-c-hashcons \;$\cdot$\; jaspek.github.io/rotor-rust};
+}
+
+\end{document}
