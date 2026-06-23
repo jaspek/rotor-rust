@@ -1,6 +1,6 @@
 # Speaker script — the final talk
 
-*Pairs with `Rotor_Presentation_Final.pdf` — the 16-plate hand-coloured
+*Pairs with `Rotor_Presentation_Final.pdf` — the 15-plate hand-coloured
 engraving deck. The slides are images; the words live here. Talk to the
 room, not the screen.*
 
@@ -10,9 +10,9 @@ that came before you with respect. One quiet spine runs through the whole
 talk: *the hard part was never the speed — it was proving the new tool still
 tells the truth.*
 
-**Split.** **Jasmin** — plates 1–11 (the problem → the craft → the proof in
-C). **Daniel** — plates 12–16 (the new capability → the validation → the
-plate → the close). The hand-off is at the end of plate 11.
+**Split.** **Jasmin** — plates 1–10 (the problem → the craft → the proof in
+C). **Daniel** — plates 11–15 (the new capability → the validation → the
+plate → the close). The hand-off is at the end of plate 10.
 
 **Pacing.** ~13–15 minutes. *(Italics are stage directions.)* `→` = next plate.
 
@@ -114,17 +114,7 @@ plate → the close). The hand-off is at the end of plate 11.
 > the first place. And in the middle — the one I'm proudest of — the original
 > C, taught the *single new trick*. We'll come back to it."
 
-### 10 — Withdraw the Sharing *(0:45)*
-*→ The fractured crystal vs. the sound one.*
-
-> "One more honesty check. Our supervisor asked: what if you switch off the
-> de-duplication entirely, in both? In the original C, it *shatters* — an
-> internal invariant breaks; the sharing there is load-bearing. In Rust, it
-> just runs: the model gets about one-and-a-half times bigger, stays
-> well-formed, and the solver gives the *identical* verdict. So
-> de-duplication changes size and speed — never *meaning*."
-
-### 11 — Teaching the Old Engine *(0:45, then hand off)*
+### 10 — Teaching the Old Engine *(0:50, then hand off)*
 *→ The two meshing cogs, "95×, byte for byte".*
 
 > "So we proved the point where it's hardest to argue. We took that one trick
@@ -141,7 +131,7 @@ plate → the close). The hand-off is at the end of plate 11.
 
 ## DANIEL
 
-### 12 — The Door Unsealed *(1:00)*
+### 11 — The Door Unsealed *(1:00)*
 *→ The opened padlock; two small frozen locks.*
 
 > "Thanks. Here's something the original tool could not see. It could only
@@ -157,7 +147,7 @@ plate → the close). The hand-off is at the end of plate 11.
 > Everything else, the count and the pointers, stays concrete. And this was
 > listed as *future work* in the original rotor paper. We built it."
 
-### 13 — The Secret, Found by Reason *(1:00)*
+### 12 — The Secret, Found by Reason *(1:00)*
 *→ The two dials landing on X and Y.*
 
 > "Concretely. We wrote a little program that behaves perfectly — *unless* the
@@ -171,7 +161,7 @@ plate → the close). The hand-off is at the end of plate 11.
 > told — it worked it out, by reason. We wrote five of these traps; the solver
 > cracked all five."
 
-### 14 — The Impartial Balance *(1:15)*
+### 13 — The Impartial Balance *(1:15)*
 *→ The level scale, "36 / 36".*
 
 > "Now — the question that hangs over the whole project. How do we know any of
@@ -193,7 +183,7 @@ plate → the close). The hand-off is at the end of plate 11.
 > bounded, eighteen programs, depth fifteen hundred. But it's *falsifiable*,
 > and it was falsified, again and again, until it wasn't."
 
-### 15 — From Cipher to Picture *(1:00)*
+### 14 — From Cipher to Picture *(1:00)*
 *→ The wall of digits → the engraved graph with the red bad node.*
 
 > "Last piece — and maybe the one that matters most. When the solver finds a
@@ -208,7 +198,7 @@ plate → the close). The hand-off is at the end of plate 11.
 > and becomes something you can point a finger at. It's online, with twelve
 > examples."
 
-### 16 — The Summit *(0:30, both)*
+### 15 — The Summit *(0:30, both)*
 *→ The painted peak, the flag, the cartouche.*
 
 > "So — a thousand times faster, a whole class of bugs now reachable, every
