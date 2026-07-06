@@ -126,13 +126,20 @@ impl Btor2Builder {
         symbol: &str,
         comment: impl Into<Option<String>>,
     ) -> NodeId {
-        self.intern(
+        // Inputs are never deduplicated — like states, each declaration is a
+        // distinct nondeterministic value even if sort and symbol coincide.
+        // (Currently unused; hardened so future use cannot silently alias.)
+        let was_cse = self.enable_cse;
+        self.enable_cse = false;
+        let id = self.intern(
             Op::Input {
                 sort,
                 symbol: symbol.to_string(),
             },
             comment.into(),
-        )
+        );
+        self.enable_cse = was_cse;
+        id
     }
 
     pub fn state(
