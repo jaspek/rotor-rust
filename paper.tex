@@ -1,13 +1,7 @@
-\documentclass[conference]{IEEEtran}
-\usepackage[utf8]{inputenc}
-\usepackage[T1]{fontenc}
-\usepackage{amsmath,amssymb}
-\usepackage{graphicx}
-\usepackage{booktabs}
-\usepackage{hyperref}
-\usepackage{listings}
-\usepackage{xcolor}
+\documentclass[sigplan,screen,nonacm]{acmart}
+\settopmatter{printfolios=true}
 
+\usepackage{listings}
 \lstset{
   basicstyle=\ttfamily\footnotesize,
   breaklines=true,
@@ -16,18 +10,23 @@
   keepspaces=true,
 }
 
-\title{Rotor in Rust: Fast Generation of RISC-V Machine Models\\
+\title{Rotor in Rust: Fast Generation of RISC-V Machine Models
        with Symbolic Console Arguments}
 
-\author{
-\IEEEauthorblockN{Jasmin Begi\'{c}, Daniel Wassie}
-\IEEEauthorblockA{Advanced Systems Engineering (ASE 2026), supervised by Christoph M.\ Kirsch\\
-Paris Lodron University of Salzburg, Austria}
-}
+\author{Jasmin Begi\'{c}}
+\affiliation{%
+  \institution{Paris Lodron University of Salzburg}
+  \city{Salzburg}\country{Austria}}
+\email{jask.begic@gmail.com}
+
+\author{Daniel Wassie}
+\affiliation{%
+  \institution{Paris Lodron University of Salzburg}
+  \city{Salzburg}\country{Austria}}
 
 \begin{document}
 
-\maketitle
+
 
 \begin{abstract}
 Rotor generates bit-precise BTOR2 machine models of RISC-V binaries for
@@ -60,10 +59,10 @@ witnesses step by step, completing the pipeline from binary to
 human-readable verification result.
 \end{abstract}
 
-\begin{IEEEkeywords}
-bounded model checking, BTOR2, RISC-V, symbolic execution, differential
-testing, Rust
-\end{IEEEkeywords}
+\keywords{bounded model checking, BTOR2, RISC-V, symbolic execution,
+differential testing, Rust}
+
+\maketitle
 
 \section{Introduction}
 
@@ -781,11 +780,12 @@ compressed and W-suffixed instruction paths, deeper bounds for the two
 agreed-UNSAT benchmarks, and --- as for the reference --- formal
 verification of the generator itself.
 
-\section*{Acknowledgments}
+\begin{acks}
 
 We thank Christoph M.\ Kirsch for supervision and for the profiling and
 validation methodology this paper applies, and the selfie project for
 the reference implementation and benchmark suite.
+\end{acks}
 
 \begin{thebibliography}{9}
 
