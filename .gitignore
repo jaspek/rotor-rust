@@ -79,3 +79,4 @@ benchmarks/eqv-dedupall-e1/
 benchmarks/eqv-results/
 benchmarks/*-rotorized.btor2
 benchmarks/binaries/*-rotorized.btor2
+presentations/

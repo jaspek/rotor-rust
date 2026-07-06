@@ -45,7 +45,7 @@ parallelized across cores by `benchmarks/parallel_runner.sh`) compares the
 fired property and least-k on both rotors at kmax=1500. **Final result:
 18/18 benchmarks equivalent** (`benchmarks/deep_equivalence_results.csv`).
 
-Deliverables (slides, reports, and the full course paper) are published on the [GitHub releases page](../../releases) so the repository stays free of large binary artefacts. Generator scripts for the slide decks live under `presentations/scripts/`.
+Deliverables (slides, reports, and the full course paper) are published on the [GitHub releases page](../../releases) so the repository stays free of large binary artefacts.
 
 ---
 
