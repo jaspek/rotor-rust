@@ -131,7 +131,10 @@ impl Segmentation {
         let stack_start = builder.constd(
             sid,
             stack_start_val,
-            Some(format!("static start of stack segment @ 0x{:x}", stack_start_val)),
+            Some(format!(
+                "static start of stack segment @ 0x{:x}",
+                stack_start_val
+            )),
         );
         let stack_end = builder.constd(
             sid,
@@ -191,7 +194,12 @@ impl Segmentation {
             ge_start
         } else {
             let lt_end = builder.ult(sorts.sid_boolean, vaddr, end, None);
-            builder.and_node(sorts.sid_boolean, ge_start, lt_end, Some(comment.to_string()))
+            builder.and_node(
+                sorts.sid_boolean,
+                ge_start,
+                lt_end,
+                Some(comment.to_string()),
+            )
         }
     }
 
@@ -327,7 +335,12 @@ impl Segmentation {
     ) -> NodeId {
         let bool_sid = sorts.sid_boolean;
         let mw_sid = sorts.sid_machine_word;
-        let end = builder.add(mw_sid, maddr, size, Some("start of block + size".to_string()));
+        let end = builder.add(
+            mw_sid,
+            maddr,
+            size,
+            Some("start of block + size".to_string()),
+        );
         let no_overflow = builder.ulte(
             bool_sid,
             maddr,
@@ -362,13 +375,30 @@ impl Segmentation {
     ) -> NodeId {
         let bool_sid = sorts.sid_boolean;
         let in_data = self.sized_block_in(
-            builder, sorts, maddr, size, self.data_start, self.data_end, false,
+            builder,
+            sorts,
+            maddr,
+            size,
+            self.data_start,
+            self.data_end,
+            false,
         );
         let in_heap = self.sized_block_in(
-            builder, sorts, maddr, size, self.heap_start, self.heap_end, false,
+            builder,
+            sorts,
+            maddr,
+            size,
+            self.heap_start,
+            self.heap_end,
+            false,
         );
         let in_stack = self.sized_block_in(
-            builder, sorts, maddr, size, self.stack_start, self.stack_end,
+            builder,
+            sorts,
+            maddr,
+            size,
+            self.stack_start,
+            self.stack_end,
             self.stack_end_wrapped,
         );
         let heap_or_stack = builder.or_node(

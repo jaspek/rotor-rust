@@ -63,22 +63,34 @@ pub fn rotor_sequential(
     let reg_sid = sorts.sid_register_state;
 
     let regs_brk = RegisterFile::store_register(
-        builder, sorts, core.register_file_state, a0_addr,
+        builder,
+        sorts,
+        core.register_file_state,
+        a0_addr,
         kernel.eval_program_break,
         Some("store new program break in a0".to_string()),
     );
     let regs_openat = RegisterFile::store_register(
-        builder, sorts, core.register_file_state, a0_addr,
+        builder,
+        sorts,
+        core.register_file_state,
+        a0_addr,
         kernel.eval_file_descriptor,
         Some("store new file descriptor in a0".to_string()),
     );
     let regs_read = RegisterFile::store_register(
-        builder, sorts, core.register_file_state, a0_addr,
+        builder,
+        sorts,
+        core.register_file_state,
+        a0_addr,
         kernel.read_return_value,
         Some("store read return value in a0".to_string()),
     );
     let regs_write = RegisterFile::store_register(
-        builder, sorts, core.register_file_state, a0_addr,
+        builder,
+        sorts,
+        core.register_file_state,
+        a0_addr,
         kernel.a2,
         Some("store write return value in a0".to_string()),
     );
@@ -99,14 +111,34 @@ pub fn rotor_sequential(
     };
 
     let mut kernel_regs = core.register_file_state;
-    kernel_regs = builder.ite(reg_sid, kernel.is_write, regs_write, kernel_regs,
-        Some("write system call register data flow".to_string()));
-    kernel_regs = builder.ite(reg_sid, read_returning, regs_read, kernel_regs,
-        Some("read system call register data flow".to_string()));
-    kernel_regs = builder.ite(reg_sid, kernel.is_openat, regs_openat, kernel_regs,
-        Some("openat system call register data flow".to_string()));
-    kernel_regs = builder.ite(reg_sid, kernel.is_brk, regs_brk, kernel_regs,
-        Some("brk system call register data flow".to_string()));
+    kernel_regs = builder.ite(
+        reg_sid,
+        kernel.is_write,
+        regs_write,
+        kernel_regs,
+        Some("write system call register data flow".to_string()),
+    );
+    kernel_regs = builder.ite(
+        reg_sid,
+        read_returning,
+        regs_read,
+        kernel_regs,
+        Some("read system call register data flow".to_string()),
+    );
+    kernel_regs = builder.ite(
+        reg_sid,
+        kernel.is_openat,
+        regs_openat,
+        kernel_regs,
+        Some("openat system call register data flow".to_string()),
+    );
+    kernel_regs = builder.ite(
+        reg_sid,
+        kernel.is_brk,
+        regs_brk,
+        kernel_regs,
+        Some("brk system call register data flow".to_string()),
+    );
 
     // Instruction register data flow (rd write), then ecall branch wins.
     let mut next_regs = core.register_file_state;

@@ -74,11 +74,25 @@ jobs:
           echo "Checked $(ls benchmarks/btor2-c-rotor/*.btor2 | wc -l) files, $errors errors"
           [ $errors -eq 0 ]
 
-      - name: Validate BTOR2 syntax (Rust rotor benchmarks)
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build rotor
+        run: cargo build --release
+
+      - name: Generate Rust models from the committed binaries (end-to-end)
         run: |
-          echo "Validating Rust rotor BTOR2 files..."
+          mkdir -p /tmp/rust-models
+          for m in benchmarks/binaries/*.m; do
+            n=$(basename "$m" .m)
+            ./target/release/rotor "$m" --xlen x64 --bytes-to-read 1                 --heap 2048 --stack 2048 --exit-code 0                 -o "/tmp/rust-models/$n.btor2"
+          done
+          echo "generated $(ls /tmp/rust-models | wc -l) models"
+
+      - name: Validate generated models (catbtor)
+        run: |
           errors=0
-          for f in benchmarks/btor2-rust-rotor/*.btor2; do
+          for f in /tmp/rust-models/*.btor2; do
             if catbtor "$f" > /dev/null 2>&1; then
               echo "  ✓ $(basename $f)"
             else
@@ -86,8 +100,12 @@ jobs:
               errors=$((errors + 1))
             fi
           done
-          echo "Checked $(ls benchmarks/btor2-rust-rotor/*.btor2 | wc -l) files, $errors errors"
           [ $errors -eq 0 ]
+
+      - name: Regression gate — division model must be byte-identical
+        run: |
+          cmp /tmp/rust-models/division-by-zero-3-35.btor2               benchmarks/cse-experiment/division-by-zero-cse-on.btor2
+          echo "generator output unchanged (byte-identical to the verified artifact)"
 
       - name: Validate visualizer example models
         run: |

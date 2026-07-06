@@ -49,6 +49,54 @@ Deliverables (slides, reports, and the full course paper) are published on the [
 
 ---
 
+## Quickstart — running everything from a fresh clone
+
+Prerequisites: [Rust](https://rustup.rs/) (stable), and Docker (only for
+running the model checker; generation itself needs nothing but Rust).
+
+```bash
+git clone https://github.com/jaspek/rotor-rust.git
+cd rotor-rust
+
+# 1. Build the generator (takes seconds)
+cargo build --release
+
+# 2. Generate a BTOR2 model from one of the committed RISC-V binaries
+./target/release/rotor benchmarks/binaries/division-by-zero-3-35.m     --xlen x64 --bytes-to-read 1 --heap 2048 --stack 2048 -o model.btor2
+
+# 3. Build the checker image once (btormc + catbtor from official sources)
+docker build -t btormc -f benchmarks/Dockerfile.btormc .
+
+# 4. Validate the model, then hunt the bug
+docker run --rm -v "$PWD:/w" btormc -c "catbtor /w/model.btor2"
+docker run --rm -v "$PWD:/w" btormc -c "btormc -v 1 -kmax 100 /w/model.btor2"
+#   -> "bad state property 7 reachable at bound k = 76 SATISFIABLE"
+#      i.e. some input byte reaches the division by zero after exactly
+#      76 machine instructions; the witness shows which byte.
+
+# 5. Generate the witness and watch it in the visualizer
+docker run --rm -v "$PWD:/w" btormc     -c "btormc --trace-gen-full -kmax 100 /w/model.btor2" > model.wit
+#   open https://jaspek.github.io/rotor-rust/ (or `python -m http.server`
+#   inside visualizer/) and drag model.btor2 + model.wit into the window.
+
+# 6. Symbolic command-line arguments (the bug needs argv[1][0]='C')
+./target/release/rotor benchmarks/argv-tests/test1_crash_string.m     --xlen x64 --symbolic-argv --num-symbolic-args 1 --max-arglen 8     --exit-code 1 -o argv.btor2
+docker run --rm -v "$PWD:/w" btormc -c "btormc -kmax 100 /w/argv.btor2" | head -5
+#   -> witness byte argv[1][0] = 01000011 = 'C'
+
+# 7. Reproduce the full equivalence table (Windows PowerShell; hours)
+cd benchmarks; ./run_deep_equivalence.ps1 -Kmax 1500
+
+# 8. Run the test suite
+cargo test --release
+```
+
+CI runs steps 1, 2, 4 (catbtor), and 8 on every push — including a
+regression gate that requires the generated division model to be
+byte-identical to the committed verified artifact.
+
+---
+
 ## Technical details
 
 The sections below describe each part in more depth. Readers who only want the high-level picture can stop here.

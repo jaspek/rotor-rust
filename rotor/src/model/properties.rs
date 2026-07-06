@@ -5,7 +5,7 @@ use crate::machine::core::CoreState;
 use crate::machine::registers::RegisterFile;
 use crate::machine::sorts::{MachineConstants, MachineSorts};
 use crate::model::combinational::CombinationalResult;
-use crate::riscv::isa::{regs, InstrId};
+use crate::riscv::isa::{InstrId, regs};
 
 /// Generate safety properties (bad states), ported 1:1 from the C reference
 /// (rotor.c rotor_properties at 11782 and kernel_properties at 11255).
@@ -44,7 +44,11 @@ pub fn rotor_properties(
 
     // sp value (used by stack-pointer checks)
     let sp_val = RegisterFile::load_register_by_index(
-        builder, sorts, consts, core.register_file_state, regs::SP,
+        builder,
+        sorts,
+        consts,
+        core.register_file_state,
+        regs::SP,
         Some("sp value".to_string()),
     );
 
@@ -74,7 +78,13 @@ pub fn rotor_properties(
     {
         let opcode = builder.slice(sorts.sid_7bit, ir, 6, 0, Some("opcode".to_string()));
         let funct3 = builder.slice(sorts.sid_3bit, ir, 14, 12, Some("funct3".to_string()));
-        let bit25 = builder.slice(sorts.sid_boolean, ir, 25, 25, Some("ir[25] (shamt[5])".to_string()));
+        let bit25 = builder.slice(
+            sorts.sid_boolean,
+            ir,
+            25,
+            25,
+            Some("ir[25] (shamt[5])".to_string()),
+        );
 
         let shift_funct = {
             let f001 = builder.constd(sorts.sid_3bit, 0b001, None);
@@ -115,9 +125,27 @@ pub fn rotor_properties(
     // shamt[5] (c_ir[12]) set.
     // ====================================================================
     {
-        let c_ir = builder.slice(sorts.sid_half_word, ir, 15, 0, Some("compressed IR".to_string()));
-        let c_op = builder.slice(sorts.sid_2bit, c_ir, 1, 0, Some("compressed opcode".to_string()));
-        let c_funct3 = builder.slice(sorts.sid_3bit, c_ir, 15, 13, Some("compressed funct3".to_string()));
+        let c_ir = builder.slice(
+            sorts.sid_half_word,
+            ir,
+            15,
+            0,
+            Some("compressed IR".to_string()),
+        );
+        let c_op = builder.slice(
+            sorts.sid_2bit,
+            c_ir,
+            1,
+            0,
+            Some("compressed opcode".to_string()),
+        );
+        let c_funct3 = builder.slice(
+            sorts.sid_3bit,
+            c_ir,
+            15,
+            13,
+            Some("compressed funct3".to_string()),
+        );
 
         let c0 = builder.constd(sorts.sid_2bit, 0b00, None);
         let is_c0 = builder.eq_node(bool_sid, c_op, c0, None);
@@ -125,7 +153,13 @@ pub fn rotor_properties(
         let is_f000 = builder.eq_node(bool_sid, c_funct3, f000, None);
 
         // c.addi4spn nzuimm = c_ir[12:5]; zero means illegal (covers 0x0000)
-        let nzuimm = builder.slice(sorts.sid_8bit, c_ir, 12, 5, Some("c.addi4spn nzuimm".to_string()));
+        let nzuimm = builder.slice(
+            sorts.sid_8bit,
+            c_ir,
+            12,
+            5,
+            Some("c.addi4spn nzuimm".to_string()),
+        );
         let zero8 = builder.constd(sorts.sid_8bit, 0, None);
         let nzuimm_zero = builder.eq_node(bool_sid, nzuimm, zero8, None);
 
@@ -153,7 +187,9 @@ pub fn rotor_properties(
             let slli_c2 = builder.and_node(bool_sid, is_c2, is_f000, None);
             let shift_c = builder.or_node(bool_sid, sr_c1, slli_c2, None);
             let illegal_shift = builder.and_node(
-                bool_sid, shift_c, bit12,
+                bool_sid,
+                shift_c,
+                bit12,
                 Some("compressed shift with shamt[5] on RV32 (illegal)?".to_string()),
             );
             illegal_c = builder.or_node(bool_sid, illegal_c, illegal_shift, None);
@@ -187,12 +223,20 @@ pub fn rotor_properties(
         let good = seg
             .is_machine_word_virtual_address(builder, sorts, next_pc)
             .unwrap_or(consts.nid_true);
-        bad_from_good!(good, "fetch-invalid-address", "imminent fetch at invalid address");
+        bad_from_good!(
+            good,
+            "fetch-invalid-address",
+            "imminent fetch at invalid address"
+        );
 
         // b4: fetch-unaligned — next pc aligned to the instruction grid
         // (2-byte with RVC, else 4-byte)
         let mask_val: u64 = if config.enable_c { 1 } else { 3 };
-        let mask = builder.constd(mw_sid, mask_val, Some("instruction word size mask".to_string()));
+        let mask = builder.constd(
+            mw_sid,
+            mask_val,
+            Some("instruction word size mask".to_string()),
+        );
         let low = builder.and_node(mw_sid, next_pc, mask, Some("next pc alignment".to_string()));
         let aligned = builder.eq_node(
             bool_sid,
@@ -204,7 +248,11 @@ pub fn rotor_properties(
 
         // b5: fetch-seg-fault — next pc within the code segment
         let in_code = seg.is_address_in_code_segment(builder, sorts, next_pc);
-        bad_from_good!(in_code, "fetch-seg-fault", "imminent fetch segmentation fault");
+        bad_from_good!(
+            in_code,
+            "fetch-seg-fault",
+            "imminent fetch segmentation fault"
+        );
     }
 
     // ====================================================================
@@ -228,7 +276,11 @@ pub fn rotor_properties(
             unknown,
             Some("unknown syscall ID".to_string()),
         );
-        builder.bad(bad, "unknown-syscall-ID", Some("unknown syscall ID".to_string()));
+        builder.bad(
+            bad,
+            "unknown-syscall-ID",
+            Some("unknown syscall ID".to_string()),
+        );
     }
 
     // ====================================================================
@@ -316,7 +368,11 @@ pub fn rotor_properties(
         let sp_ok = seg
             .is_machine_word_virtual_address(builder, sorts, sp_val)
             .unwrap_or(consts.nid_true);
-        bad_from_good!(sp_ok, "stack-pointer-invalid-address", "stack pointer invalid address");
+        bad_from_good!(
+            sp_ok,
+            "stack-pointer-invalid-address",
+            "stack pointer invalid address"
+        );
     }
 
     // ====================================================================
@@ -332,7 +388,7 @@ pub fn rotor_properties(
 
         // good = for each load class: block fits; non-loads: TRUE
         let mut good = consts.nid_true;
-        let mut apply = |builder: &mut Btor2Builder, good_acc: NodeId, cond: NodeId, ok: NodeId| {
+        let apply = |builder: &mut Btor2Builder, good_acc: NodeId, cond: NodeId, ok: NodeId| {
             let not_cond = builder.not(bool_sid, cond, None);
             let implied = builder.or_node(bool_sid, not_cond, ok, None);
             builder.and_node(bool_sid, good_acc, implied, None)
@@ -427,7 +483,11 @@ pub fn rotor_properties(
 
         // b18: stack-pointer-seg-fault — sp within the stack segment
         let sp_in_stack = seg.is_address_in_stack_segment(builder, sorts, sp_val);
-        bad_from_good!(sp_in_stack, "stack-pointer-seg-fault", "stack pointer segmentation fault");
+        bad_from_good!(
+            sp_in_stack,
+            "stack-pointer-seg-fault",
+            "stack pointer segmentation fault"
+        );
 
         // ================================================================
         // b19-b22: kernel seg-fault checks (C kernel_properties)
@@ -464,20 +524,25 @@ pub fn rotor_properties(
                 invalid,
                 Some("invalid new program break with active brk system call".to_string()),
             );
-            builder.bad(bad, "brk-seg-fault", Some("possible brk segmentation fault".to_string()));
+            builder.bad(
+                bad,
+                "brk-seg-fault",
+                Some("possible brk segmentation fault".to_string()),
+            );
         }
 
         // b20: openat-seg-fault — filename access range
         // [a1, a1 + MAX_STRING_LENGTH - 1] not fully inside the HEAP segment
         // (C rotor.c:11353-11364, MAX_STRING_LENGTH = 128).
         {
-            let max_string_length = builder.constd(
-                mw_sid,
-                128,
-                Some("maximum string length".to_string()),
-            );
+            let max_string_length =
+                builder.constd(mw_sid, 128, Some("maximum string length".to_string()));
             let range_ok = seg.is_range_in_heap_segment(
-                builder, sorts, kernel.a1, max_string_length, consts.nid_machine_word_1,
+                builder,
+                sorts,
+                kernel.a1,
+                max_string_length,
+                consts.nid_machine_word_1,
             );
             let range_bad = builder.not(
                 bool_sid,
@@ -490,7 +555,11 @@ pub fn rotor_properties(
                 range_bad,
                 Some("openat system call filename access may cause segmentation fault".to_string()),
             );
-            builder.bad(bad, "openat-seg-fault", Some("possible openat segmentation fault".to_string()));
+            builder.bad(
+                bad,
+                "openat-seg-fault",
+                Some("possible openat segmentation fault".to_string()),
+            );
         }
 
         // b21: read-seg-fault — checked only at the START of a read
@@ -518,7 +587,11 @@ pub fn rotor_properties(
                 Some("bytes to be read > 0?".to_string()),
             );
             let range_ok = seg.is_range_in_heap_segment(
-                builder, sorts, kernel.a1, kernel.a2, consts.nid_machine_word_1,
+                builder,
+                sorts,
+                kernel.a1,
+                kernel.a2,
+                consts.nid_machine_word_1,
             );
             let range_bad = builder.not(
                 bool_sid,
@@ -537,7 +610,11 @@ pub fn rotor_properties(
                 cond,
                 Some("storing bytes to be read may cause segmentation fault".to_string()),
             );
-            builder.bad(bad, "read-seg-fault", Some("possible read segmentation fault".to_string()));
+            builder.bad(
+                bad,
+                "read-seg-fault",
+                Some("possible read segmentation fault".to_string()),
+            );
         }
 
         // b22: write-seg-fault — symmetric for writes
@@ -549,7 +626,11 @@ pub fn rotor_properties(
                 Some("bytes to be written > 0?".to_string()),
             );
             let range_ok = seg.is_range_in_heap_segment(
-                builder, sorts, kernel.a1, kernel.a2, consts.nid_machine_word_1,
+                builder,
+                sorts,
+                kernel.a1,
+                kernel.a2,
+                consts.nid_machine_word_1,
             );
             let range_bad = builder.not(
                 bool_sid,
@@ -563,7 +644,11 @@ pub fn rotor_properties(
                 cond,
                 Some("loading bytes to be written may cause segmentation fault".to_string()),
             );
-            builder.bad(bad, "write-seg-fault", Some("possible write segmentation fault".to_string()));
+            builder.bad(
+                bad,
+                "write-seg-fault",
+                Some("possible write segmentation fault".to_string()),
+            );
         }
     }
 
@@ -680,13 +765,26 @@ fn compressed_mem_addresses(
         let r = builder.slice(sorts.sid_3bit, ir, 9, 7, None);
         let r5 = builder.uext(sorts.sid_register_address, r, 2, None);
         let eight = builder.constd(sorts.sid_register_address, 8, None);
-        builder.add(sorts.sid_register_address, r5, eight, Some("rs1' = 8 + c_ir[9:7]".to_string()))
+        builder.add(
+            sorts.sid_register_address,
+            r5,
+            eight,
+            Some("rs1' = 8 + c_ir[9:7]".to_string()),
+        )
     };
-    let rs1_prime_val = builder.read(mw_sid, core.register_file_state, rs1_prime,
-        Some("rs1' value".to_string()));
+    let rs1_prime_val = builder.read(
+        mw_sid,
+        core.register_file_state,
+        rs1_prime,
+        Some("rs1' value".to_string()),
+    );
     let sp_addr = consts.nid_register(regs::SP);
-    let sp_val = builder.read(mw_sid, core.register_file_state, sp_addr,
-        Some("sp value".to_string()));
+    let sp_val = builder.read(
+        mw_sid,
+        core.register_file_state,
+        sp_addr,
+        Some("sp value".to_string()),
+    );
 
     // C0 word offsets: uimm[5:3]=c_ir[12:10]<<3, uimm[2]=c_ir[6]<<2, uimm[6]=c_ir[5]<<6
     let w_53 = field(builder, 12, 10, 3);

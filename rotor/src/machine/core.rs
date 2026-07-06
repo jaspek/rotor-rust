@@ -98,13 +98,8 @@ impl CoreState {
         } else {
             // Default mode: concrete argv image on the stack, exactly like the
             // C reference boot loader (argc=1, argv[0]=program name).
-            let (sp, stack_val) = Self::initialize_concrete_argv(
-                builder,
-                sorts,
-                vaddr_top,
-                word_size,
-                &binary.name,
-            );
+            let (sp, stack_val) =
+                Self::initialize_concrete_argv(builder, sorts, vaddr_top, word_size, &binary.name);
             (sp, Some(stack_val))
         };
 
@@ -314,28 +309,35 @@ impl CoreState {
 
         // Write one machine word little-endian onto the zeroed base,
         // skipping zero bytes.
-        let write_word = |builder: &mut Btor2Builder, current: NodeId, at: u64, value: u64, what: &str| {
-            let mut cur = current;
-            for byte_idx in 0..word_size {
-                let byte_val = (value >> (byte_idx * 8)) & 0xFF;
-                if byte_val == 0 {
-                    continue;
+        let write_word =
+            |builder: &mut Btor2Builder, current: NodeId, at: u64, value: u64, what: &str| {
+                let mut cur = current;
+                for byte_idx in 0..word_size {
+                    let byte_val = (value >> (byte_idx * 8)) & 0xFF;
+                    if byte_val == 0 {
+                        continue;
+                    }
+                    let addr = builder.constd(sorts.sid_stack_address, at + byte_idx, None);
+                    let val = builder.constd(
+                        sorts.sid_byte,
+                        byte_val,
+                        Some(format!("{} byte {}", what, byte_idx)),
+                    );
+                    cur = builder.write(sorts.sid_stack_state, cur, addr, val, None);
                 }
-                let addr = builder.constd(sorts.sid_stack_address, at + byte_idx, None);
-                let val = builder.constd(
-                    sorts.sid_byte,
-                    byte_val,
-                    Some(format!("{} byte {}", what, byte_idx)),
-                );
-                cur = builder.write(sorts.sid_stack_state, cur, addr, val, None);
-            }
-            cur
-        };
+                cur
+            };
 
         // argc = 1 at SP
         current = write_word(builder, current, sp, 1, "argc");
         // argv[0] pointer at SP + word
-        current = write_word(builder, current, sp + word_size, string_start, "argv[0] pointer");
+        current = write_word(
+            builder,
+            current,
+            sp + word_size,
+            string_start,
+            "argv[0] pointer",
+        );
         // argv NULL terminator (SP + 2w) and env NULL terminator (SP + 3w)
         // are zero — covered by the zeroed base.
 

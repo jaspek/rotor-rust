@@ -80,3 +80,9 @@ benchmarks/eqv-results/
 benchmarks/*-rotorized.btor2
 benchmarks/binaries/*-rotorized.btor2
 presentations/
+Rotor_Paper.pdf
+rotor.md
+model.btor2
+model.wit
+argv.btor2
+_paperbuild/

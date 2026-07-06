@@ -164,82 +164,201 @@ impl KernelState {
         let mw_sid = sorts.sid_machine_word;
 
         let a0 = RegisterFile::load_register_by_index(
-            builder, sorts, consts, register_file, regs::A0, Some("a0 value".to_string()),
+            builder,
+            sorts,
+            consts,
+            register_file,
+            regs::A0,
+            Some("a0 value".to_string()),
         );
         let a1 = RegisterFile::load_register_by_index(
-            builder, sorts, consts, register_file, regs::A1, Some("a1 value".to_string()),
+            builder,
+            sorts,
+            consts,
+            register_file,
+            regs::A1,
+            Some("a1 value".to_string()),
         );
         let a2 = RegisterFile::load_register_by_index(
-            builder, sorts, consts, register_file, regs::A2, Some("a2 value".to_string()),
+            builder,
+            sorts,
+            consts,
+            register_file,
+            regs::A2,
+            Some("a2 value".to_string()),
         );
         let a7 = RegisterFile::load_register_by_index(
-            builder, sorts, consts, register_file, regs::A7, Some("a7 value".to_string()),
+            builder,
+            sorts,
+            consts,
+            register_file,
+            regs::A7,
+            Some("a7 value".to_string()),
         );
 
         // syscall id decode (a7 == ID)
-        let is_exit = builder.eq_node(bool_sid, a7, consts.nid_exit_syscall,
-            Some("a7 == exit syscall ID?".to_string()));
-        let is_brk = builder.eq_node(bool_sid, a7, consts.nid_brk_syscall,
-            Some("a7 == brk syscall ID?".to_string()));
+        let is_exit = builder.eq_node(
+            bool_sid,
+            a7,
+            consts.nid_exit_syscall,
+            Some("a7 == exit syscall ID?".to_string()),
+        );
+        let is_brk = builder.eq_node(
+            bool_sid,
+            a7,
+            consts.nid_brk_syscall,
+            Some("a7 == brk syscall ID?".to_string()),
+        );
         let is_openat = {
-            let openat = builder.eq_node(bool_sid, a7, consts.nid_openat_syscall,
-                Some("a7 == openat syscall ID?".to_string()));
-            let open = builder.eq_node(bool_sid, a7, consts.nid_open_syscall,
-                Some("a7 == open syscall ID?".to_string()));
-            builder.or_node(bool_sid, openat, open,
-                Some("a7 == openat or open syscall ID?".to_string()))
+            let openat = builder.eq_node(
+                bool_sid,
+                a7,
+                consts.nid_openat_syscall,
+                Some("a7 == openat syscall ID?".to_string()),
+            );
+            let open = builder.eq_node(
+                bool_sid,
+                a7,
+                consts.nid_open_syscall,
+                Some("a7 == open syscall ID?".to_string()),
+            );
+            builder.or_node(
+                bool_sid,
+                openat,
+                open,
+                Some("a7 == openat or open syscall ID?".to_string()),
+            )
         };
-        let is_read = builder.eq_node(bool_sid, a7, consts.nid_read_syscall,
-            Some("a7 == read syscall ID?".to_string()));
-        let is_write = builder.eq_node(bool_sid, a7, consts.nid_write_syscall,
-            Some("a7 == write syscall ID?".to_string()));
+        let is_read = builder.eq_node(
+            bool_sid,
+            a7,
+            consts.nid_read_syscall,
+            Some("a7 == read syscall ID?".to_string()),
+        );
+        let is_write = builder.eq_node(
+            bool_sid,
+            a7,
+            consts.nid_write_syscall,
+            Some("a7 == write syscall ID?".to_string()),
+        );
 
-        let active_exit = builder.and_node(bool_sid, is_ecall, is_exit,
-            Some("active exit system call".to_string()));
-        let active_brk = builder.and_node(bool_sid, is_ecall, is_brk,
-            Some("active brk system call".to_string()));
-        let active_openat = builder.and_node(bool_sid, is_ecall, is_openat,
-            Some("active openat system call".to_string()));
-        let active_read = builder.and_node(bool_sid, is_ecall, is_read,
-            Some("active read system call".to_string()));
-        let active_write = builder.and_node(bool_sid, is_ecall, is_write,
-            Some("active write system call".to_string()));
+        let active_exit = builder.and_node(
+            bool_sid,
+            is_ecall,
+            is_exit,
+            Some("active exit system call".to_string()),
+        );
+        let active_brk = builder.and_node(
+            bool_sid,
+            is_ecall,
+            is_brk,
+            Some("active brk system call".to_string()),
+        );
+        let active_openat = builder.and_node(
+            bool_sid,
+            is_ecall,
+            is_openat,
+            Some("active openat system call".to_string()),
+        );
+        let active_read = builder.and_node(
+            bool_sid,
+            is_ecall,
+            is_read,
+            Some("active read system call".to_string()),
+        );
+        let active_write = builder.and_node(
+            bool_sid,
+            is_ecall,
+            is_write,
+            Some("active write system call".to_string()),
+        );
 
         // brk: new break valid iff current brk <= a0 <= heap end
-        let a0_ge_brk = builder.ugte(bool_sid, a0, kernel.program_break,
-            Some("new program break >= current program break?".to_string()));
-        let a0_le_heap_end = builder.ulte(bool_sid, a0, heap_end,
-            Some("new program break <= end of heap segment?".to_string()));
-        let new_brk_valid = builder.and_node(bool_sid, a0_ge_brk, a0_le_heap_end,
-            Some("is new program break in heap segment?".to_string()));
-        let eval_program_break = builder.ite(mw_sid, new_brk_valid, a0, kernel.program_break,
-            Some("update brk if new program break is in heap segment".to_string()));
+        let a0_ge_brk = builder.ugte(
+            bool_sid,
+            a0,
+            kernel.program_break,
+            Some("new program break >= current program break?".to_string()),
+        );
+        let a0_le_heap_end = builder.ulte(
+            bool_sid,
+            a0,
+            heap_end,
+            Some("new program break <= end of heap segment?".to_string()),
+        );
+        let new_brk_valid = builder.and_node(
+            bool_sid,
+            a0_ge_brk,
+            a0_le_heap_end,
+            Some("is new program break in heap segment?".to_string()),
+        );
+        let eval_program_break = builder.ite(
+            mw_sid,
+            new_brk_valid,
+            a0,
+            kernel.program_break,
+            Some("update brk if new program break is in heap segment".to_string()),
+        );
 
         // openat: fd + 1
-        let eval_file_descriptor = builder.add(mw_sid, kernel.file_descriptor,
-            consts.nid_machine_word_1, Some("increment file descriptor".to_string()));
+        let eval_file_descriptor = builder.add(
+            mw_sid,
+            kernel.file_descriptor,
+            consts.nid_machine_word_1,
+            Some("increment file descriptor".to_string()),
+        );
 
         // read helpers (C rotor names preserved)
-        let more_readable_bytes = builder.ugt(bool_sid, kernel.readable_bytes,
-            consts.nid_machine_word_0, Some("more readable bytes".to_string()));
+        let more_readable_bytes = builder.ugt(
+            bool_sid,
+            kernel.readable_bytes,
+            consts.nid_machine_word_0,
+            Some("more readable bytes".to_string()),
+        );
 
-        let read_lt_a2 = builder.ult(bool_sid, kernel.read_bytes, a2,
-            Some("more bytes to read as requested in a2".to_string()));
-        let can_and_would = builder.and_node(bool_sid, read_lt_a2, more_readable_bytes,
-            Some("can and still would like to read more bytes".to_string()));
-        let still_reading_active_read = builder.and_node(bool_sid, active_read, can_and_would,
-            Some("still reading active read system call".to_string()));
+        let read_lt_a2 = builder.ult(
+            bool_sid,
+            kernel.read_bytes,
+            a2,
+            Some("more bytes to read as requested in a2".to_string()),
+        );
+        let can_and_would = builder.and_node(
+            bool_sid,
+            read_lt_a2,
+            more_readable_bytes,
+            Some("can and still would like to read more bytes".to_string()),
+        );
+        let still_reading_active_read = builder.and_node(
+            bool_sid,
+            active_read,
+            can_and_would,
+            Some("still reading active read system call".to_string()),
+        );
 
-        let incremented_read_bytes = builder.add(mw_sid, kernel.read_bytes,
+        let incremented_read_bytes = builder.add(
+            mw_sid,
+            kernel.read_bytes,
             consts.nid_machine_word_1,
-            Some("increment bytes already read by read system call".to_string()));
-        let more_than_one_byte_to_read = builder.ult(bool_sid, incremented_read_bytes, a2,
-            Some("more than one byte to read as requested in a2".to_string()));
-        let more_than_one_readable_byte = builder.ugt(bool_sid, kernel.readable_bytes,
-            consts.nid_machine_word_1, Some("more than one readable byte".to_string()));
+            Some("increment bytes already read by read system call".to_string()),
+        );
+        let more_than_one_byte_to_read = builder.ult(
+            bool_sid,
+            incremented_read_bytes,
+            a2,
+            Some("more than one byte to read as requested in a2".to_string()),
+        );
+        let more_than_one_readable_byte = builder.ugt(
+            bool_sid,
+            kernel.readable_bytes,
+            consts.nid_machine_word_1,
+            Some("more than one readable byte".to_string()),
+        );
         let more_than_one_readable_byte_to_read = builder.and_node(
-            bool_sid, more_than_one_byte_to_read, more_than_one_readable_byte,
-            Some("can and still would like to read more than one byte".to_string()));
+            bool_sid,
+            more_than_one_byte_to_read,
+            more_than_one_readable_byte,
+            Some("can and still would like to read more than one byte".to_string()),
+        );
 
         // read return value (C rotor's exact nested ITE, rotor.c:11055-11075):
         //   a2 > 0 ? (more_readable ? (more_to_read ? (more_readable>1 ? a0
@@ -249,20 +368,42 @@ impl KernelState {
         } else {
             0xFFFF_FFFF
         };
-        let minus_one = builder.constd(mw_sid, minus_one_val,
-            Some("machine word -1".to_string()));
+        let minus_one = builder.constd(mw_sid, minus_one_val, Some("machine word -1".to_string()));
 
-        let inner1 = builder.ite(mw_sid, more_than_one_readable_byte, a0,
+        let inner1 = builder.ite(
+            mw_sid,
+            more_than_one_readable_byte,
+            a0,
             incremented_read_bytes,
-            Some("return bytes read so far + 1 if only one more readable byte".to_string()));
-        let inner2 = builder.ite(mw_sid, more_than_one_byte_to_read, inner1, a2,
-            Some("return a2 if read_bytes == a2 - 1 and still readable".to_string()));
-        let inner3 = builder.ite(mw_sid, more_readable_bytes, inner2, minus_one,
-            Some("return -1 if a2 > 0 and nothing readable at start".to_string()));
-        let a2_gt_0 = builder.ugt(bool_sid, a2, consts.nid_machine_word_0,
-            Some("more than 0 bytes to read".to_string()));
-        let read_return_value = builder.ite(mw_sid, a2_gt_0, inner3,
-            consts.nid_machine_word_0, Some("return 0 if a2 == 0".to_string()));
+            Some("return bytes read so far + 1 if only one more readable byte".to_string()),
+        );
+        let inner2 = builder.ite(
+            mw_sid,
+            more_than_one_byte_to_read,
+            inner1,
+            a2,
+            Some("return a2 if read_bytes == a2 - 1 and still readable".to_string()),
+        );
+        let inner3 = builder.ite(
+            mw_sid,
+            more_readable_bytes,
+            inner2,
+            minus_one,
+            Some("return -1 if a2 > 0 and nothing readable at start".to_string()),
+        );
+        let a2_gt_0 = builder.ugt(
+            bool_sid,
+            a2,
+            consts.nid_machine_word_0,
+            Some("more than 0 bytes to read".to_string()),
+        );
+        let read_return_value = builder.ite(
+            mw_sid,
+            a2_gt_0,
+            inner3,
+            consts.nid_machine_word_0,
+            Some("return 0 if a2 == 0".to_string()),
+        );
 
         KernelFlows {
             active_ecall: is_ecall,

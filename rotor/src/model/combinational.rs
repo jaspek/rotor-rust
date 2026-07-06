@@ -475,7 +475,11 @@ pub fn rotor_combinational(
         0x8000_0000
     };
     let int_min = builder.constd(mw_sid, int_min_val, Some("INT_MIN".to_string()));
-    let minus_one_val: u64 = if config.xlen == Xlen::X64 { !0u64 } else { 0xFFFF_FFFF };
+    let minus_one_val: u64 = if config.xlen == Xlen::X64 {
+        !0u64
+    } else {
+        0xFFFF_FFFF
+    };
     let minus_one = builder.constd(mw_sid, minus_one_val, Some("-1".to_string()));
     let rs1_is_int_min = builder.eq_node(bool_sid, rs1_val, int_min, None);
     let rs2_is_minus_one = builder.eq_node(bool_sid, rs2_val, minus_one, None);
@@ -521,28 +525,34 @@ pub fn rotor_combinational(
     // address-validity bad nodes for them. The C extension splits loads into
     // {CLw, CLd, CLwsp, CLdsp} and stores into {CSw, CSd, CSwsp, CSdsp}.
     let is_compressed_load = if config.enable_c {
-        let ids = [
-            InstrId::CLw, InstrId::CLd, InstrId::CLwsp, InstrId::CLdsp,
-        ];
+        let ids = [InstrId::CLw, InstrId::CLd, InstrId::CLwsp, InstrId::CLdsp];
         let mut acc = consts.nid_false;
         for id in ids {
             let eq = builder.eq_node(bool_sid, instruction_id, consts.nid_instr_id(id), None);
             acc = builder.or_node(bool_sid, acc, eq, None);
         }
-        builder.and_node(bool_sid, is_compressed, acc, Some("compressed load?".to_string()))
+        builder.and_node(
+            bool_sid,
+            is_compressed,
+            acc,
+            Some("compressed load?".to_string()),
+        )
     } else {
         consts.nid_false
     };
     let is_compressed_store = if config.enable_c {
-        let ids = [
-            InstrId::CSw, InstrId::CSd, InstrId::CSwsp, InstrId::CSdsp,
-        ];
+        let ids = [InstrId::CSw, InstrId::CSd, InstrId::CSwsp, InstrId::CSdsp];
         let mut acc = consts.nid_false;
         for id in ids {
             let eq = builder.eq_node(bool_sid, instruction_id, consts.nid_instr_id(id), None);
             acc = builder.or_node(bool_sid, acc, eq, None);
         }
-        builder.and_node(bool_sid, is_compressed, acc, Some("compressed store?".to_string()))
+        builder.and_node(
+            bool_sid,
+            is_compressed,
+            acc,
+            Some("compressed store?".to_string()),
+        )
     } else {
         consts.nid_false
     };
