@@ -1,6 +1,8 @@
 \documentclass[sigplan,screen,nonacm]{acmart}
 \settopmatter{printfolios=true}
 
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta}
 \usepackage{listings}
 \lstset{
   basicstyle=\ttfamily\footnotesize,
@@ -23,6 +25,7 @@
 \affiliation{%
   \institution{Paris Lodron University of Salzburg}
   \city{Salzburg}\country{Austria}}
+\email{danielkassahun2@gmail.com}
 
 \begin{document}
 
@@ -181,6 +184,57 @@ increasing $k$, whether some assignment of the uninitialized states
 reaches a bad state within $k$ steps; \texttt{btormc} reports the
 property index and the minimal such $k$, together with a witness.
 
+The rotor paper establishes that its models are \emph{sound and
+complete at bit level}: a machine state is reachable on a RISC-V
+machine within $k$ instructions for some input exactly when the model
+is $k$-satisfiable for that input~\cite{rotorpaper}. This property is
+what gives our comparison its leverage. Because each model is a
+faithful mirror of a machine, two models of the \emph{same} binary that
+disagree --- on which property fires, or after how many transitions ---
+mirror two \emph{different} machines; conversely, if no disagreement
+can be exhibited, the machines coincide on everything the solver can
+observe. Our validation (Section~\ref{sec:validation}) is the
+systematic search for such a disagreement.
+
+\subsection{The BTOR2 format by example}
+\label{sec:btor2}
+
+BTOR2 is a line-oriented format: every line introduces a node with a
+numeric id, and later lines refer to earlier ones by id. The following
+complete model counts upward by a machine-chosen step and asks whether
+the counter can reach 200:
+
+\begin{lstlisting}
+1  sort bitvec 1        ; Boolean
+2  sort bitvec 8        ; a byte
+3  constd 2 0
+4  state 2 counter
+5  init 2 4 3           ; counter := 0
+6  state 2 delta        ; NO init: model input
+7  add 2 4 6
+8  next 2 4 7           ; counter' = counter+delta
+9  constd 2 200
+10 ugte 1 4 9
+11 bad 10 counter-overflow
+\end{lstlisting}
+
+\noindent Line 6 is the whole input mechanism: a state without an
+\texttt{init} may take any value of its sort in the initial state, and
+--- because it also has no \texttt{next} --- may be re-chosen at every
+step. The model checker therefore quantifies over all sequences of
+\texttt{delta} values; \texttt{btormc} answers that the bad state is
+reachable at bound $k{=}1$ (choose $\texttt{delta} \geq 200$
+immediately). When an input must stay \emph{fixed} after the initial
+state --- a file's contents, a command-line argument --- the generator
+adds a self-loop \texttt{next}, freezing the nondeterministic choice at
+step zero. Both devices appear throughout rotor models and both matter
+in Section~\ref{sec:argv}.
+
+A rotor model of a real binary is this same skeleton at scale: tens of
+registers and memory arrays instead of one counter, one transition
+function per state built from the semantics of every instruction in the
+binary, and 24 \texttt{bad} lines instead of one.
+
 \subsection{A worked example}
 \label{sec:worked}
 
@@ -258,7 +312,43 @@ the performance comparison in Section~\ref{sec:performance}; the
 Section~\ref{sec:performance} as well. The same builder serves a
 \texttt{--no-cse} mode (Section~\ref{sec:cse}) and a comment-stripping
 mode mirroring the reference's \texttt{-nocomments}, both used in the
-evaluation.
+evaluation. Table~\ref{tab:modules} summarises the crate layout.
+
+\begin{table}[t]
+\caption{Crate layout: one module per concern.}
+\label{tab:modules}
+\centering
+\footnotesize
+\begin{tabular}{ll}
+\toprule
+Module & Responsibility \\
+\midrule
+\texttt{btor2/builder} & node interning (hash-consing), id allocation \\
+\texttt{btor2/node, sort} & typed \texttt{Op} enum; bit-vector/array sorts \\
+\texttt{btor2/printer} & text output in creation order \\
+\texttt{riscv/elf\_loader} & ELF segments via \texttt{goblin} \\
+\texttt{riscv/decode, compressed} & RV64/RV32 base, M, C decoding \\
+\texttt{machine/sorts, registers} & machine sorts, register file \\
+\texttt{machine/memory, segmentation} & segment arrays, bounds logic \\
+\texttt{machine/kernel} & break, file descriptor, input counters \\
+\texttt{model/combinational} & per-instruction data flow \\
+\texttt{model/sequential} & next-state functions \\
+\texttt{model/properties} & the 24 bad states, in reference order \\
+\texttt{model/generator} & four-phase pipeline, CLI surface \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\emph{Determinism.} Generation is fully deterministic: nodes are printed
+in creation order, no hash-map iteration reaches the output path, and no
+randomness exists anywhere in the generator. The same binary and flags
+therefore produce byte-identical models across runs \emph{and across
+platforms} --- our continuous integration exploits this by regenerating
+all 18 benchmark models on every push (on Linux, from models originally
+verified on Windows) and requiring the division model to compare equal,
+byte for byte, against the committed artifact of the validation
+campaign. Reproducibility is thus not a promise but a gate the
+repository enforces on itself.
 
 \subsection{Faithfulness requirements}
 \label{sec:faithful}
@@ -292,6 +382,25 @@ by item, semantics that are easy to get subtly wrong:
         the reference's exact order, so that \texttt{btormc} property
         \emph{indices} are comparable across both models.
 \end{itemize}
+
+The geometry items are directly checkable against the reference's
+output, because the reference prints its segment boundaries as named
+constants. For the worked example the reference model contains
+\begin{lstlisting}
+consth 4 00010000 ; start of code segment
+consth 4 00011008 ; end of data segment
+consth 4 00012000 ; start of heap segment
+consth 4 FFFFF800 ; start of stack segment
+consth 4 00000000 ; end of stack segment
+\end{lstlisting}
+\noindent --- note the heap starting at the page boundary
+\texttt{0x12000} rather than at the data end \texttt{0x11008}, and the
+stack end printed as \emph{zero}: $2^{32}$ does not fit in the 32-bit
+virtual-address sort, so the constant wraps, and every upper-bound
+comparison against it must be skipped rather than evaluated. Our first
+implementation aligned the heap to nothing and compared against the
+wrapped zero; both mistakes produce models that are subtly, detectably
+different machines.
 
 Each property body was ported from the reference source rather than
 re-derived, and the porting process itself illustrates why this
@@ -347,6 +456,42 @@ the reference freezes its input buffer: a state without a \texttt{next}
 may be re-chosen by the solver at every step, whereas a command-line
 argument is fixed once at process start.
 
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[yscale=0.52, xscale=0.72, font=\footnotesize]
+  \fill[black!12] (0,3) rectangle (9.6,4);
+  \draw (0,3) rectangle (9.6,4);
+  \node at (4.8,3.5)
+    {\texttt{argv[1..N]}: \textbf{symbolic bytes} + concrete \texttt{\textbackslash0}};
+  \draw (0,2) rectangle (9.6,3);
+  \node at (4.8,2.5) {\texttt{argv[0]} = program name \quad (concrete)};
+  \draw (0,1) rectangle (9.6,2);
+  \node at (4.8,1.5) {pointers \texttt{argv[0..N]} + null \quad (concrete)};
+  \draw (0,0) rectangle (9.6,1);
+  \node at (4.8,0.5) {\texttt{argc} \quad (concrete)};
+  \draw[-{Stealth}] (-1.0,0.5) -- (-0.08,0.5);
+  \node[anchor=east] at (-1.05,0.5) {\texttt{SP}};
+  \node[anchor=west, black!60] at (9.7,3.9) {$\leftarrow 2^{32}$};
+\end{tikzpicture}
+\caption{The process-start stack image under
+\texttt{--symbolic-argv}. Only the shaded argument bytes are open to
+the solver; layout, count, pointers, and terminators are concrete.}
+\label{fig:stack}
+\end{figure}
+
+Figure~\ref{fig:stack} shows the resulting initial stack.
+Realizability deserves care in both directions. \emph{Witness to
+world:} a satisfying assignment gives each argument byte a concrete
+value; the corresponding real command line is the one whose argument
+strings contain exactly those bytes up to each string's first zero
+byte, so every witness is executable. \emph{World to witness:} any real
+invocation whose arguments fit the configured count and length bounds
+corresponds to an admissible assignment, so no bug within those bounds
+is missed. The bounds themselves are the same compromise the reference
+already makes for standard input, whose buffer is likewise finite; and
+they are visible, not hidden --- both appear as explicit constants in
+the generated model's header comments.
+
 Three design choices keep the model finite and static. \emph{(i)}~The
 argument count is fixed at generation time
 (\texttt{--num-symbolic-args}); the solver explores argument
@@ -373,27 +518,46 @@ condition holds; the model checker must synthesise the bytes.}
 \label{tab:argv}
 \centering
 \footnotesize
-\begin{tabular}{lll}
+\begin{tabular}{lllr}
 \toprule
-Test & Bug condition & Class \\
+Test & Bug condition & Class & $k$ \\
 \midrule
-1 & \texttt{argv[1][0]} $=$ 67 (\texttt{'C'}) & exact byte \\
-2 & $\texttt{argv[1][0]}{\cdot}256 + \texttt{argv[1][1]} = 16706$ & ordered pair \\
-3 & \texttt{argv[1][0]} $\neq 0 \wedge$ \texttt{argv[1][1]} $= 0$ & length \\
-4 & \texttt{argv[1][0]}$=$\texttt{'X'} $\wedge$ \texttt{argv[2][0]}$=$\texttt{'Y'} & two args \\
-5 & \texttt{argv[1][0]} $+$ \texttt{argv[1][1]} $= 200$ & arithmetic \\
+1 & \texttt{argv[1][0]} $=$ 67 (\texttt{'C'}) & exact byte & 67 \\
+2 & $\texttt{argv[1][0]}{\cdot}256 + \texttt{argv[1][1]} = 16706$ & ordered pair & 86 \\
+3 & \texttt{argv[1][0]} $\neq 0 \wedge$ \texttt{argv[1][1]} $= 0$ & length & 84 \\
+4 & \texttt{argv[1][0]}$=$\texttt{'X'} $\wedge$ \texttt{argv[2][0]}$=$\texttt{'Y'} & two args & 91 \\
+5 & \texttt{argv[1][0]} $+$ \texttt{argv[1][1]} $= 200$ & arithmetic & 83 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-On every program, \texttt{btormc} finds the planted bug within seconds
-and the witness contains exactly the designed bytes. For test~1 the
-bad-exit-code property becomes satisfiable at bound $k{=}67$ with
-witness byte \texttt{argv[1][0]} $=$ \texttt{0x43} $=$ \texttt{'C'} ---
-a value the solver reaches through three pointer dereferences of the
-modeled stack image. Test~4 requires specific bytes in two
-\emph{different} arguments simultaneously; no exploration of standard
-input could ever produce it.
+On every program, \texttt{btormc} finds the planted bug within seconds;
+the measured minimal bounds appear in the table's last column, and the
+witnesses --- committed alongside the models as visualizer examples ---
+contain exactly the designed bytes. For test~1 the bad-exit-code
+property becomes satisfiable at bound $k{=}67$ with witness byte
+\texttt{argv[1][0]} $=$ \texttt{0x43} $=$ \texttt{'C'} --- a value the
+solver reaches through three pointer dereferences of the modeled stack
+image: from the stack cell at \texttt{SP{+}8} to the pointer array, to
+the string slot, to the byte the program's arithmetic actually
+inspects. The witness's opening lines are literal enough to quote:
+\begin{lstlisting}
+sat
+b23
+#0
+3 01000011 argv[1][0]#0
+\end{lstlisting}
+\noindent --- property \texttt{b23} (the target exit code) is
+satisfiable, and the solver's chosen value for the first symbolic
+argument byte is \texttt{01000011}, which is 67, which is \texttt{'C'}.
+The remaining argument bytes are unconstrained in the witness, exactly
+as they should be: the program never reads them, so no value of theirs
+can matter. The spread of bounds is itself informative: test~4, which
+constrains two \emph{different} arguments simultaneously, needs the
+longest path (91 transitions) because the program walks both argument
+pointers; no exploration of standard input could produce its bug at any
+depth, since the model without symbolic arguments fixes both bytes to
+zero.
 
 \section{Differential Validation}
 \label{sec:validation}
@@ -415,12 +579,24 @@ minimal bound} $k$ --- or both must remain unsatisfiable through the
 bound limit.
 \end{quote}
 
+Stated precisely: let $V(M) \in (\{b_0,\dots,b_{23}\} \times
+\mathbb{N}) \cup \{\textsc{unsat}\}$ be the model checker's verdict on
+model $M$ --- the least $k \le k_{\max}$ at which some property is
+satisfiable, together with that property's index, or \textsc{unsat} if
+none is. Two generators \emph{agree on a binary} $B$ under parameters
+$\theta$ iff $V(\mathit{gen}_C(B,\theta)) =
+V(\mathit{gen}_{\mathit{Rust}}(B,\theta))$, and the campaign demands
+agreement for every benchmark under every tested $\theta$.
+
 The criterion is strict because $k$ counts every machine transition on
 the violating path, from the boot state to the violation: a single
 extra or missing instruction anywhere --- in the boot image, an
 instruction's semantics, a system call --- shifts $k$ or changes the
 property. The verdict also quantifies over all inputs, so no difference
-can hide behind input choice.
+can hide behind input choice. It is also \emph{transitive} in a useful
+way: Section~\ref{sec:backport} reuses the identical criterion, with
+the roles recast, to certify a modification of the reference against
+the unmodified reference.
 
 \subsection{Setup}
 
@@ -432,6 +608,16 @@ with \texttt{catbtor} and a $k{=}0$ \texttt{btormc} load, then run
 rotor paper reports (66--1438). The harness records the (property, $k$)
 pair or UNSAT per side and compares; benchmark/rotor pairs run as
 isolated containers, parallelised across cores.
+
+\emph{Provenance.} Every claim about ``the reference's model'' is
+checkable from the artifact itself: the C rotor records its own
+invocation and full parameter set in each output file's header
+comments, so the committed reference models carry the proof that they
+were produced by the unmodified tool under the stated flags. The
+checking toolchain is likewise pinned --- \texttt{catbtor} and
+\texttt{btormc} are built from the official Boolector repositories
+inside a committed Dockerfile --- so the entire experiment reproduces
+from the repository with no unstated dependencies.
 
 \subsection{Results}
 
@@ -511,6 +697,37 @@ so the agreement is not an artifact of one parameter choice, and the
 configuration change exercises genuinely different behaviour. In total:
 36 paired verdicts, zero divergences. Our lowest observed bound, 66,
 equals the lowest bound reported in the rotor paper.
+
+\subsection{A cautionary baseline}
+\label{sec:vacuous}
+
+Our first comparison, before this methodology existed, ran both models
+at $k_{\max}{=}35$ and found the two rotors ``agreeing'' on all 18
+benchmarks. The agreement was vacuous: no property of any benchmark
+fires before bound 66, so both sides reported UNSAT everywhere and the
+test could not have failed. Worse, the models at that time were
+\emph{not} equivalent --- the defects of Section~\ref{sec:faithful}
+were all present and undetected. A differential criterion is only as
+strong as the depth it explores; calibrating $k_{\max}$ against
+known-positive bounds (here, the 66--1438 range the rotor paper
+publishes) is what turned the harness from a formality into an
+instrument. We report this because the failure mode is silent and, we
+suspect, common.
+
+\subsection{Harness engineering}
+\label{sec:harness}
+
+Four engineering rules made the campaign trustworthy. \emph{Isolation:}
+every (benchmark, rotor) pair runs in its own container, so no state
+leaks between runs and any pair can be re-run alone. \emph{Incremental
+persistence:} the harness appends each verdict to the results file as
+it lands, so a crash or interrupt loses at most one run.
+\emph{Parallelism without trust:} pairs run concurrently across cores,
+but throughput never substitutes for evidence --- which matters because
+of the fourth rule. \emph{Completion evidence:} a run only counts as
+UNSAT if the solver's log shows it actually exhausted the bound;
+``no output'' is recorded as an error, never as a verdict. The fourth
+rule was added the hard way, as the next section recounts.
 
 \subsection{The criterion at work}
 \label{sec:atwork}
@@ -599,6 +816,17 @@ spends 11.7 \emph{billion} comparisons, which at nanosecond scale
 accounts for essentially the entire 139\,s wall time. Our generator
 asks the question on every creation, at one hash probe each.
 
+The arithmetic closes end to end. At a conservative 5--10\,ns per
+linked-list comparison (a pointer chase plus a five-field equality
+check), $11.7 \times 10^9$ comparisons cost 60--120 seconds --- the
+measured 139\,s wall time minus ordinary generation work. On the other
+side, $1.6 \times 10^5$ hash probes cost well under a millisecond; the
+Rust rotor's 0.06--0.14\,s is dominated by process start-up, ELF
+parsing, and writing 3\,MB of output. Memory closes the same way:
+3.17\,M retained line records at ${\approx}135$ bytes each is
+${\approx}428$\,MB --- the measured peak --- while ${\approx}111$k
+nodes plus their hash index fit in the measured 20\,MB.
+
 The creation counts reveal a second, architectural difference: the
 reference creates 3.17M line records and prunes unreachable ones when
 printing (create-then-filter), which is also its 428\,MB peak; our hash
@@ -666,6 +894,24 @@ the reference's exact reuse decisions, and a \emph{dedup-everywhere} one
 mirroring the Rust generator's rule (deduplicate every node except
 states, inputs, init/next, and properties).
 
+\begin{table}[t]
+\caption{The back-port, validated by the same criterion (selfie model;
+18-benchmark differential under both exit-code settings).}
+\label{tab:backport}
+\centering
+\footnotesize
+\begin{tabular}{lrrl}
+\toprule
+Variant (all C) & time & lines & validated by \\
+\midrule
+reference baseline & 139\,s & 138{,}820 & --- \\
+hash-consed, byte-identical & 1.5\,s & 138{,}820 & \texttt{diff} on all outputs \\
+hash-consed, dedup-everywhere & 1.5\,s & 99{,}k & 36/36 differential \\
+naive dedup-everything & --- & --- & rejected: bad state at $k{=}0$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 The byte-identical C rotor generates selfie's model in \textbf{1.5\,s}
 instead of \textbf{139\,s} ($\sim$95$\times$), producing output that
 \texttt{diff} reports identical to the baseline on all 18 benchmarks and on
@@ -692,15 +938,39 @@ criterion then certified.
 \subsection{Output size}
 \label{sec:size}
 
-The output files differ in size while encoding the same content. With
-comments stripped in both tools, the reference's 10.59\,MB shrinks to
-5.21\,MB --- 50.8\% of its bytes are comments --- against our 2.97\,MB,
-a raw ratio of $1.76\times$ explained by constant encoding (binary
-digit strings versus decimal), node-identifier width (7 versus 5 digits
-on average), and the duplicate lines of
-Section~\ref{sec:performance}. File size is serialization, not
-semantics; the behavioural identity of the models is established by
-Section~\ref{sec:validation}.
+The output files differ in size while encoding the same content;
+Table~\ref{tab:size} decomposes the difference on the selfie model.
+Comments dominate: 50.8\% of the reference's bytes are comment text
+(it annotates every loaded word with its value in binary and
+hexadecimal), against 5\% of ours. Stripping comments in both tools
+(\texttt{-nocomments} / \texttt{--no-comments}) shrinks the ratio from
+$3.4\times$ to $1.76\times$; the remainder is constant encoding (the
+reference emits loaded words as 32/64-digit binary strings, ours as
+decimals --- 65--83 versus 24 characters per constant line on average),
+node-identifier width (7 versus 5 digits on average, paid by every
+operand reference), and the duplicate lines of
+Section~\ref{sec:performance}. Both stripped files remain well-formed.
+File size is serialization, not semantics; the behavioural identity of
+the models is established by Section~\ref{sec:validation}.
+
+\begin{table}[t]
+\caption{Decomposing the output-size difference (selfie model).}
+\label{tab:size}
+\centering
+\footnotesize
+\begin{tabular}{lrr}
+\toprule
+ & C rotor & Rust rotor \\
+\midrule
+bytes, with comments & 10{,}588{,}507 & 3{,}122{,}826 \\
+bytes, comments stripped & 5{,}210{,}809 & 2{,}966{,}913 \\
+comment share & 50.8\% & 5.0\% \\
+lines & 138{,}820 & 110{,}904 \\
+mean line length (chars) & 75.3 & 27.2 \\
+mean node-id width (digits) & 7.0 & 5.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \section{Witness Visualizer}
 \label{sec:visualizer}
@@ -736,6 +1006,66 @@ explanation a non-expert can follow --- and it doubles as a debugging
 instrument for the generator itself, since a malformed model is often
 visibly malformed as a graph.
 
+Implementation-wise the visualizer is a static site --- plain
+JavaScript over Cytoscape.js, deployable from any file server and
+hosted on GitHub Pages --- with its own parsers for the BTOR2 format
+and for \texttt{btormc}'s witness format. Replay works by evaluating
+the witness's per-frame assignments against the parsed model: at each
+step the player updates the displayed value of every state and input
+node, highlights nodes whose values changed, and, on the final frame,
+lights the violated property. The argv models of
+Section~\ref{sec:argvtests} parse to roughly 1{,}800 nodes and remain
+fully interactive; the layered layouts (hierarchical via dagre,
+force-directed as an alternative) keep the data-flow direction
+readable, and the cone-of-influence filter is what makes $10^5$-node
+models navigable at all: the slice of the graph feeding one selected
+property is typically two orders of magnitude smaller than the model.
+
+\section{Discussion: What Carried the Project}
+\label{sec:discussion}
+
+Three working rules, none specific to Rust or to rotor, did most of the
+work reported here.
+
+\emph{Equivalence outranks speed.} The performance results were
+available within days; the right to \emph{claim} them took weeks,
+because a faster generator that silently changes model meaning is worse
+than useless in a verification pipeline. Ordering the effort that way
+--- faithfulness first, benchmarks second --- is what the differential
+harness enforced mechanically.
+
+\emph{Never referee your own match.} Every correctness claim in this
+paper bottoms out in a tool we did not write: \texttt{catbtor} for
+well-formedness, \texttt{btormc} for behaviour. The same discipline
+applied inward caught our measurement harness mis-recording a dead
+solver as an UNSAT verdict (Section~\ref{sec:atwork}) --- the
+methodology's one apparent divergence was a bug in the methodology's
+own tooling, found because one anomaly against seventeen matches
+demanded investigation rather than acceptance.
+
+\emph{Byte-identity is the cheapest strong oracle.} Whenever a change
+is meant to be behaviour-preserving --- a formatting pass, an
+instrumentation counter, a data-structure swap --- regenerating a model
+and comparing bytes against a verified artifact decides the question
+instantly and with no solver in the loop. This gate caught the naive
+variant of the back-port (Section~\ref{sec:backport}) immediately, and
+it now runs in continuous integration on every commit. Byte-identity is
+sufficient, never necessary: when it fails legitimately (as with
+dedup-everywhere, which \emph{should} shrink the model), the
+differential criterion takes over as the finer instrument.
+
+\emph{Count before you conclude.} The profiling of
+Section~\ref{sec:performance} used no profiler --- four integer
+counters per tool, each checkable against a value the tool already
+reports, attributed a three-orders-of-magnitude difference exactly and
+exposed an architectural difference (create-then-filter versus
+filter-at-creation) that wall-clock numbers alone would never have
+revealed. The counters also falsified our own initial narrative: we had
+assumed both tools ask the sharing question equally often and differ
+only in cost per question; in fact the reference asks it 300$\times$
+less often \emph{because} it is expensive --- the data structure had
+already shaped the architecture around it.
+
 \section{Related Work}
 
 Rotor~\cite{rotorpaper} defines the model family we generate; BTOR2,
@@ -751,7 +1081,16 @@ instead leaves argument bytes open inside a single monolithic
 transition-system model checked exhaustively to a bound. Hash-consing
 is folklore made precise by~\cite{hashconsing}; our contribution is not
 the technique but the measured, counter-level comparison against a
-linear-scan implementation of the same sharing question. Our validation
+linear-scan implementation of the same sharing question. On the checking side, the models are solver-agnostic: the rotor
+paper's own experiments run the same BTOR2 models under bitme with Z3
+and bitwuzla backends~\cite{rotorpaper}, and everything in this paper
+would transfer --- our criterion needs only \emph{some} sound checker
+that reports minimal bounds. For witness consumption, the BTOR2 tool
+suite ships \texttt{btorsim}, which re-simulates a model under a
+witness and prints state dumps; our visualizer differs in intent rather
+than mechanics, trading textual completeness for an interactive,
+structural view a non-expert can follow (and we use \texttt{btorsim}
+in continuous integration as a witness sanity check). Our validation
 methodology is differential testing~\cite{mckeeman} with an unusually
 sharp oracle: a bit-precise model checker comparing minimal
 counterexample depths.
@@ -773,19 +1112,86 @@ back into the reference C: there it is $\sim$95$\times$ faster with
 byte-identical output, which settles the cause as the data structure and
 not the language.
 
-Future work includes symbolic argument \emph{count} and packed string
-layouts, symbolic environment variables and file contents, extending
-differential validation to gcc-compiled binaries exercising the
-compressed and W-suffixed instruction paths, deeper bounds for the two
-agreed-UNSAT benchmarks, and --- as for the reference --- formal
-verification of the generator itself.
+Several extensions are within reach of the machinery already built.
+\emph{Symbolic argument count} needs a family of stack layouts selected
+by a small symbolic index --- an if-then-else over the finitely many
+admissible \texttt{argc} values --- rather than one static image;
+\emph{packed string layouts} would additionally make each pointer a
+function of the preceding strings' lengths, closing the last
+realizability caveat of Section~\ref{sec:argv} for programs that walk
+past terminators. \emph{Symbolic environment variables} are the same
+construction one block higher on the boot stack, and \emph{symbolic
+file contents} reduce to the existing input-buffer device once file
+descriptors map to buffers. On validation: extending the differential
+campaign to gcc-compiled binaries would exercise the compressed and
+W-suffixed instruction paths that selfie's compiler never emits, and
+the two agreed-\textsc{unsat} benchmarks deserve deeper bounds than
+1500. The continuous-integration pipeline already regenerates and
+byte-checks all benchmark models on every commit; promoting one or two
+\emph{deep} solver runs into it would guard behavioural equivalence,
+not just output stability, continuously. Finally --- as the rotor
+authors note for the reference --- formal verification of the
+generator itself remains the horizon: the differential method bounds
+the ways two implementations can disagree, but only a verified
+generator bounds the ways both can be wrong together.
 
 \begin{acks}
 
 We thank Christoph M.\ Kirsch for supervision and for the profiling and
 validation methodology this paper applies, and the selfie project for
-the reference implementation and benchmark suite.
+the reference implementation and benchmark suite. Drafting and
+engineering were assisted by AI tooling (Anthropic's Claude), following
+the course's guidance; all measurements were produced by, and all
+claims are checkable against, the committed harness and artifacts.
 \end{acks}
+
+\appendix
+
+\section{The 24 Bad-State Properties}
+\label{app:properties}
+
+Table~\ref{tab:props} lists all 24 properties in the reference's
+emission order --- the order both generators now share, so that
+\texttt{btormc}'s property indices are directly comparable. Each
+predicate was ported from the reference source; informal one-line
+descriptions are given here.
+
+\begin{table}[h]
+\caption{All bad-state properties, in emission order.}
+\label{tab:props}
+\centering
+\footnotesize
+\begin{tabular}{lll}
+\toprule
+\# & Property & Fires when \\
+\midrule
+b0 & illegal-instruction & shift with illegal shift amount \\
+b1 & illegal-compressed-instruction & illegal compressed immediate \\
+b2 & known-instructions & decoder yields no known instruction \\
+b3 & fetch-invalid-address & next pc outside address space \\
+b4 & fetch-unaligned & next pc misaligned \\
+b5 & fetch-seg-fault & next pc outside code segment \\
+b6 & unknown-syscall-ID & ecall with unrecognised a7 \\
+b7 & division-by-zero & divisor is zero \\
+b8 & signed-division-overflow & $\mathit{INT\_MIN} /{-1}$ \\
+b9 & load-invalid-address & load address outside address space \\
+b10 & store-invalid-address & store address outside address space \\
+b11 & compressed-load-invalid-address & as b9, compressed forms \\
+b12 & compressed-store-invalid-address & as b10, compressed forms \\
+b13 & stack-pointer-invalid-address & sp outside address space \\
+b14 & load-seg-fault & loaded block not in data/heap/stack \\
+b15 & store-seg-fault & stored block not in data/heap/stack \\
+b16 & compressed-load-seg-fault & as b14, compressed forms \\
+b17 & compressed-store-seg-fault & as b15, compressed forms \\
+b18 & stack-pointer-seg-fault & sp outside stack segment \\
+b19 & brk-seg-fault & requested break above heap end \\
+b20 & openat-seg-fault & filename range outside heap \\
+b21 & read-seg-fault & read buffer outside heap (at read start) \\
+b22 & write-seg-fault & write buffer outside heap \\
+b23 & bad-exit-code & exit with the configured target code \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \begin{thebibliography}{9}
 
