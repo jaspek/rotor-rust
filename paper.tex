@@ -1,5 +1,6 @@
 \documentclass[sigplan,screen,nonacm]{acmart}
 \settopmatter{printfolios=true}
+\emergencystretch=2em
 
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta}
@@ -319,21 +320,22 @@ evaluation. Table~\ref{tab:modules} summarises the crate layout.
 \label{tab:modules}
 \centering
 \footnotesize
+\setlength{\tabcolsep}{3.5pt}%
 \begin{tabular}{ll}
 \toprule
 Module & Responsibility \\
 \midrule
-\texttt{btor2/builder} & node interning (hash-consing), id allocation \\
+\texttt{btor2/builder} & node interning (hash-consing), ids \\
 \texttt{btor2/node, sort} & typed \texttt{Op} enum; bit-vector/array sorts \\
 \texttt{btor2/printer} & text output in creation order \\
 \texttt{riscv/elf\_loader} & ELF segments via \texttt{goblin} \\
 \texttt{riscv/decode, compressed} & RV64/RV32 base, M, C decoding \\
 \texttt{machine/sorts, registers} & machine sorts, register file \\
-\texttt{machine/memory, segmentation} & segment arrays, bounds logic \\
+\texttt{machine/memory, segm.} & segment arrays, bounds logic \\
 \texttt{machine/kernel} & break, file descriptor, input counters \\
 \texttt{model/combinational} & per-instruction data flow \\
 \texttt{model/sequential} & next-state functions \\
-\texttt{model/properties} & the 24 bad states, in reference order \\
+\texttt{model/properties} & the 24 bad states, reference order \\
 \texttt{model/generator} & four-phase pipeline, CLI surface \\
 \bottomrule
 \end{tabular}
@@ -458,7 +460,7 @@ argument is fixed once at process start.
 
 \begin{figure}[t]
 \centering
-\begin{tikzpicture}[yscale=0.52, xscale=0.72, font=\footnotesize]
+\begin{tikzpicture}[yscale=0.52, xscale=0.62, font=\footnotesize]
   \fill[black!12] (0,3) rectangle (9.6,4);
   \draw (0,3) rectangle (9.6,4);
   \node at (4.8,3.5)
@@ -469,9 +471,9 @@ argument is fixed once at process start.
   \node at (4.8,1.5) {pointers \texttt{argv[0..N]} + null \quad (concrete)};
   \draw (0,0) rectangle (9.6,1);
   \node at (4.8,0.5) {\texttt{argc} \quad (concrete)};
-  \draw[-{Stealth}] (-1.0,0.5) -- (-0.08,0.5);
-  \node[anchor=east] at (-1.05,0.5) {\texttt{SP}};
-  \node[anchor=west, black!60] at (9.7,3.9) {$\leftarrow 2^{32}$};
+  \draw[-{Stealth}] (-0.75,0.5) -- (-0.08,0.5);
+  \node[anchor=east] at (-0.8,0.5) {\texttt{SP}};
+  \node[anchor=east, black!60] at (9.5,4.4) {\scriptsize top of memory, $2^{32}$};
 \end{tikzpicture}
 \caption{The process-start stack image under
 \texttt{--symbolic-argv}. Only the shaded argument bytes are open to
@@ -493,9 +495,9 @@ they are visible, not hidden --- both appear as explicit constants in
 the generated model's header comments.
 
 Three design choices keep the model finite and static. \emph{(i)}~The
-argument count is fixed at generation time
-(\texttt{--num-symbolic-args}); the solver explores argument
-\emph{content}, not count. \emph{(ii)}~Each argument occupies a
+argument count is fixed at generation time by the
+\texttt{--num-symbolic-\allowbreak args} flag; the solver explores
+argument \emph{content}, not count. \emph{(ii)}~Each argument occupies a
 fixed-size slot of \texttt{--max-arglen} bytes plus a concrete
 terminator, bounding input like the reference bounds its input buffer.
 \emph{(iii)}~Interior zero bytes are permitted and correspond to shorter
@@ -900,14 +902,15 @@ states, inputs, init/next, and properties).
 \label{tab:backport}
 \centering
 \footnotesize
+\setlength{\tabcolsep}{3pt}%
 \begin{tabular}{lrrl}
 \toprule
 Variant (all C) & time & lines & validated by \\
 \midrule
 reference baseline & 139\,s & 138{,}820 & --- \\
-hash-consed, byte-identical & 1.5\,s & 138{,}820 & \texttt{diff} on all outputs \\
+hash-consed, byte-identical & 1.5\,s & 138{,}820 & \texttt{diff}, all outputs \\
 hash-consed, dedup-everywhere & 1.5\,s & 99{,}k & 36/36 differential \\
-naive dedup-everything & --- & --- & rejected: bad state at $k{=}0$ \\
+naive dedup-everything & --- & --- & bad state at $k{=}0$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1160,7 +1163,8 @@ descriptions are given here.
 \caption{All bad-state properties, in emission order.}
 \label{tab:props}
 \centering
-\footnotesize
+\scriptsize
+\setlength{\tabcolsep}{3pt}%
 \begin{tabular}{lll}
 \toprule
 \# & Property & Fires when \\
