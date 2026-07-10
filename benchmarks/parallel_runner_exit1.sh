@@ -3,7 +3,11 @@
 # code" planted bugs). Both rotors' models generated with target exit 1.
 set -u
 
-ROOT="C:/Users/jasko/Programming/Rust/Project01/benchmarks"
+# Session-specific helper: C side of the 18 benchmarks under target
+# exit code 1 (the Rust side of that campaign ran separately; the
+# merged output = the committed exit1 CSV).
+# Prerequisites: btormc image built; btor2-c-rotor-exit1/ present.
+ROOT="$(cd "$(dirname "$0")" && pwd)"
 KMAX=1500
 OUT="$ROOT/parallel_results_exit1"
 mkdir -p "$OUT"

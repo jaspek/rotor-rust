@@ -2,7 +2,7 @@
 // Written in C* (selfie subset): only uint64_t types, pointer arithmetic.
 // This is a simplified length check: string of exactly length 1 triggers the bug.
 // Compile: selfie -c test3_length_dependent.c -m 1
-// Rotor:   rotor test3_length_dependent.m --symbolic-argv --symbolic-argc 1 --max-arglen 8
+// Rotor:   rotor test3_length_dependent.m --symbolic-argv --num-symbolic-args 1 --max-arglen 8 --exit-code 1
 
 uint64_t main(uint64_t argc, uint64_t* argv) {
     uint64_t* arg1;

@@ -52,8 +52,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake g++
-          git clone --depth 1 https://github.com/Boolector/btor2tools.git /tmp/btor2tools
+          git clone https://github.com/Boolector/btor2tools.git /tmp/btor2tools
           cd /tmp/btor2tools
+          git checkout d33c73ff1d173f1bfac8ba6b1c6d68ba62c55f8e
           mkdir build && cd build
           cmake .. -DCMAKE_BUILD_TYPE=Release
           make -j$(nproc)
@@ -85,7 +86,9 @@ jobs:
           mkdir -p /tmp/rust-models
           for m in benchmarks/binaries/*.m; do
             n=$(basename "$m" .m)
-            ./target/release/rotor "$m" --xlen x64 --bytes-to-read 1                 --heap 2048 --stack 2048 --exit-code 0                 -o "/tmp/rust-models/$n.btor2"
+            ./target/release/rotor "$m" --xlen x64 --bytes-to-read 1 \
+                --heap 2048 --stack 2048 --exit-code 0 \
+                -o "/tmp/rust-models/$n.btor2"
           done
           echo "generated $(ls /tmp/rust-models | wc -l) models"
 
@@ -104,7 +107,8 @@ jobs:
 
       - name: Regression gate — division model must be byte-identical
         run: |
-          cmp /tmp/rust-models/division-by-zero-3-35.btor2               benchmarks/cse-experiment/division-by-zero-cse-on.btor2
+          cmp /tmp/rust-models/division-by-zero-3-35.btor2 \
+              benchmarks/cse-experiment/division-by-zero-cse-on.btor2
           echo "generator output unchanged (byte-identical to the verified artifact)"
 
       - name: Validate visualizer example models
@@ -119,14 +123,16 @@ jobs:
           done
 
       - name: Simulate counter model with btorsim
+        shell: bash
         run: |
+          set -o pipefail
           echo "Simulating counter-with-input with witness trace..."
           btorsim -b visualizer/examples/counter-with-input.btor2 \
                      visualizer/examples/counter-with-input.wit 2>&1 | tail -5
           echo "Simulation completed successfully"
 
   visualizer-lint:
-    name: Visualizer (JS Lint)
+    name: Visualizer (JS syntax check)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -16,7 +16,8 @@ $HereDir  = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $Bins     = Join-Path $HereDir "binaries"
 $CRotor   = Join-Path $HereDir "btor2-c-rotor"
 $RustOut  = Join-Path $HereDir "btor2-rust-rotor"
-$Rotor    = Join-Path (Split-Path $HereDir) "target\release\rotor.exe"
+$RotorName = if ($env:OS -eq "Windows_NT") { "rotor.exe" } else { "rotor" }
+$Rotor    = Join-Path (Split-Path $HereDir) "target/release/$RotorName"
 $Img      = "btormc:latest"
 $CsvPath  = Join-Path $HereDir "deep_equivalence_results.csv"
 

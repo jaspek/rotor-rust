@@ -5,7 +5,11 @@
 # as one small file per run, merged afterwards by the caller.
 set -u
 
-ROOT="C:/Users/jasko/Programming/Rust/Project01/benchmarks"
+# Session-specific helper: covers 8 of the 18 benchmarks, both rotors
+# (the merged output of these helpers = the committed CSVs).
+# Prerequisites: btormc image built; btor2-rust-rotor/ generated first
+# (run_deep_equivalence.ps1 does that).
+ROOT="$(cd "$(dirname "$0")" && pwd)"
 KMAX=1500
 OUT="$ROOT/parallel_results"
 mkdir -p "$OUT"

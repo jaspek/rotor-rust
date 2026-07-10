@@ -2,7 +2,7 @@
 // Written in C* (selfie subset): only uint64_t types, pointer arithmetic.
 // E.g. byte0 = 100, byte1 = 100 -> sum = 200 -> bad exit.
 // Compile: selfie -c test5_checksum.c -m 1
-// Rotor:   rotor test5_checksum.m --symbolic-argv --symbolic-argc 1 --max-arglen 8
+// Rotor:   rotor test5_checksum.m --symbolic-argv --num-symbolic-args 1 --max-arglen 8 --exit-code 1
 
 uint64_t main(uint64_t argc, uint64_t* argv) {
     uint64_t* arg1;

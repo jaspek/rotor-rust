@@ -2,7 +2,7 @@
 // Written in C* (selfie subset): only uint64_t types, pointer arithmetic.
 // Tests multi-argument symbolic reasoning (requires --symbolic-argc 2).
 // Compile: selfie -c test4_multi_arg.c -m 1
-// Rotor:   rotor test4_multi_arg.m --symbolic-argv --symbolic-argc 2 --max-arglen 8
+// Rotor:   rotor test4_multi_arg.m --symbolic-argv --num-symbolic-args 2 --max-arglen 8 --exit-code 1
 
 uint64_t main(uint64_t argc, uint64_t* argv) {
     uint64_t* arg1;
