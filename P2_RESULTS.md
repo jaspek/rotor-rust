@@ -25,6 +25,8 @@ the generator are correct only because identical lines are reused.
 Baseline C run for reference (reuse ON, selfie.c, same container):
 wall 2:02.8, peak memory 432 MB, model 138,820 lines (10.6 MB),
 "3,165,611 lines of model formulae generated" before reuse/pruning.
+(This run includes selfie compiling itself via `-c`; the apples-to-apples
+binary-only figures are 139 s / 428 MB — see README / PROFILING_RESULTS.md.)
 
 ### Rust rotor (--no-cse flag)
 
@@ -124,6 +126,6 @@ cd benchmarks; .\run_deep_equivalence.ps1 -Kmax 1500
 .\target\release\rotor.exe <bin.m> --xlen x64 --no-cse -o model.btor2
 
 # C CSE off (crashes)
-docker build -t selfie-cse -f C:\Users\jasko\Programming\Rust\Selfie\Dockerfile.cse .
+docker build -t selfie-cse -f benchmarks/cse-experiment/Dockerfile.cse benchmarks/cse-experiment
 docker run --rm selfie-cse
 ```

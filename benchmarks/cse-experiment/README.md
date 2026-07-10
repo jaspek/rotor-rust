@@ -30,15 +30,15 @@ difference in what gets deduplicated.
 - `patch_c_counters.py` - not part of this experiment, it patches the
   profiling counters into `/selfie/tools/rotor.c` (and restores `reuse_lines = 1`,
    which the CSE-off build above leaves at 0). Used by the profiling
-  run written up in `../../PROFILING_RESULTS.md`
-  ''
-  
+  run written up in `../../PROFILING_RESULTS.md`.
 
 ## Reproduce
 
-All paths are relative to the repository root. Build the generator ('cargo build --release') and the checker image
-('docker build -t btormc -f benchmarks/Dockerfile.btormc .') first - 'rotor' and 'btormc' are not on the 'PATH';
-the former is a build artifact and the latter only exists inside the image.
+All paths are relative to the repository root. Build the generator
+(`cargo build --release`) and the checker image
+(`docker build -t btormc -f benchmarks/Dockerfile.btormc .`) first —
+`rotor` and `btormc` are not on `PATH`; the former is a build artifact
+and the latter only exists inside the image.
 
 
 ```bash

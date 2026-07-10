@@ -44,6 +44,9 @@ btormc before the next. The deep harness (`benchmarks/run_deep_equivalence.ps1`,
 parallelized across cores by `benchmarks/parallel_runner.sh`) compares the
 fired property and least-k on both rotors at kmax=1500. **Final result:
 18/18 benchmarks equivalent** (`benchmarks/deep_equivalence_results.csv`).
+The hash-consing optimisation was also ported back into the reference C
+with byte-identical output (139 s → 1.5 s, ~93×): see
+[rotor-c-hashcons](https://github.com/jaspek/rotor-c-hashcons).
 
 Deliverables (slides, reports, and the full course paper) are published on the [GitHub releases page](../../releases) so the repository stays free of large binary artefacts.
 
@@ -62,7 +65,8 @@ cd rotor-rust
 cargo build --release
 
 # 2. Generate a BTOR2 model from one of the committed RISC-V binaries
-./target/release/rotor benchmarks/binaries/division-by-zero-3-35.m     --xlen x64 --bytes-to-read 1 --heap 2048 --stack 2048 -o model.btor2
+./target/release/rotor benchmarks/binaries/division-by-zero-3-35.m \
+    --xlen x64 --bytes-to-read 1 --heap 2048 --stack 2048 -o model.btor2
 
 # 3. Build the checker image once (btormc + catbtor from official sources)
 docker build -t btormc -f benchmarks/Dockerfile.btormc .
@@ -75,23 +79,28 @@ docker run --rm -v "$PWD:/w" btormc -c "btormc -v 1 -kmax 100 /w/model.btor2"
 #      76 machine instructions; the witness shows which byte.
 
 # 5. Generate the witness and watch it in the visualizer
-docker run --rm -v "$PWD:/w" btormc     -c "btormc --trace-gen-full -kmax 100 /w/model.btor2" > model.wit
+docker run --rm -v "$PWD:/w" btormc \
+    -c "btormc --trace-gen-full -kmax 100 /w/model.btor2" > model.wit
 #   open https://jaspek.github.io/rotor-rust/ (or `python -m http.server`
 #   inside visualizer/) and drag model.btor2 + model.wit into the window.
 
 # 6. Symbolic command-line arguments (the bug needs argv[1][0]='C')
-./target/release/rotor benchmarks/argv-tests/test1_crash_string.m     --xlen x64 --symbolic-argv --num-symbolic-args 1 --max-arglen 8     --exit-code 1 -o argv.btor2
+./target/release/rotor benchmarks/argv-tests/test1_crash_string.m \
+    --xlen x64 --symbolic-argv --num-symbolic-args 1 --max-arglen 8 \
+    --exit-code 1 -o argv.btor2
 docker run --rm -v "$PWD:/w" btormc -c "btormc -kmax 100 /w/argv.btor2" | head -5
 #   -> witness byte argv[1][0] = 01000011 = 'C'
 
-# 7. Reproduce the full equivalence table (Windows PowerShell; hours)
+# 7. Reproduce the full equivalence table (PowerShell harness; hours —
+#    on Linux/macOS install pwsh; results are committed as the two
+#    deep_equivalence_results*.csv files)
 cd benchmarks; ./run_deep_equivalence.ps1 -Kmax 1500
 
 # 8. Run the test suite
 cargo test --release
 ```
 
-CI runs steps 1, 2, 4 (catbtor), and 8 on every push — including a
+CI runs steps 1, 2, 4 (catbtor), and 8 on every push to master — including a
 regression gate that requires the generated division model to be
 byte-identical to the committed verified artifact.
 
@@ -109,7 +118,7 @@ The sections below describe each part in more depth. Readers who only want the h
 - **Multi-core**: Configurable number of cores
 - **Segmented memory model**: Code (read-only), data, heap, and stack segments
 - **Kernel syscall modeling**: `exit`, `read`, `write`, `openat`, `brk`
-- **Safety properties**: 24 bad-state properties matching the C reference — bad/good/any exit, division by zero, signed-division overflow, illegal-instruction (full + compressed + known-instructions), fetch (invalid-address, unaligned, seg-fault), load/store (invalid-address + seg-fault, plus compressed variants), stack-pointer (invalid-address + seg-fault), unknown-syscall-ID, syscall-arg seg-faults (brk/openat/read/write)
+- **Safety properties**: 24 bad-state properties matching the C reference — target exit code, division by zero, signed-division overflow, illegal-instruction (full + compressed + known-instructions), fetch (invalid-address, unaligned, seg-fault), load/store (invalid-address + seg-fault, plus compressed variants), stack-pointer (invalid-address + seg-fault), unknown-syscall-ID, syscall-arg seg-faults (brk/openat/read/write) — the full list in emission order is Appendix A of the paper
 - **HashMap-based CSE**: O(1) common subexpression elimination on every node (the C original walks a linear list and disables reuse in its hot loading path; measured: 11.7 billion list comparisons vs 159k hash probes on selfie, see `PROFILING_RESULTS.md`). On selfie's self-compiled binary (~43k RISC-U instructions, ~111k BTOR2 nodes), model generation takes ~0.1 s in 20 MB peak memory — vs 139 s in 428 MB for the C reference on the same binary
 - **Arena allocation**: Cache-friendly node storage with stable indices
 
@@ -144,7 +153,7 @@ rotor <binary.elf> --no-cse
 # Strip all comments from the output (C rotor's -nocomments)
 rotor <binary.elf> --no-comments
 
-# Code synthesis mode (symbolic code, no binary)
+# Code synthesis mode (EXPERIMENTAL stub — code segment is not yet symbolic)
 rotor --synthesis -o model.btor2
 ```
 
@@ -259,11 +268,14 @@ python -m http.server 8080
 # Then open http://localhost:8080 in your browser
 ```
 
+Note: the graph libraries are loaded from unpkg.com, so an internet
+connection is required even when serving locally.
+
 #### Loading Models
 
 - **Upload**: Click "Upload" to load a `.btor2` file from disk
 - **Paste**: Click "Paste" to paste BTOR2 text directly
-- **Example dropdown**: Pick one of 12 bundled examples (5 symbolic-argv tests with witnesses, 4 standard selfie benchmarks, 3 tiny exploration examples). Picking an entry loads both the model and its witness in one click.
+- **Example dropdown**: Pick one of 12 bundled examples (5 symbolic-argv tests with witnesses, 4 standard selfie benchmarks, 3 tiny exploration examples). Picking an entry loads the model — and, where one exists, its witness — in one click.
 
 #### Witness Trace Playback
 
@@ -295,7 +307,7 @@ Listed in `visualizer/examples/manifest.json`. The dropdown groups them into thr
 
 ### Benchmarks
 
-Pre-generated BTOR2 models for 17+ selfie test programs:
+Pre-generated BTOR2 models for the 18 selfie test programs:
 
 ```
 benchmarks/
@@ -312,30 +324,37 @@ benchmarks/
   btor2-c-rotor-exit1/         C reference models regenerated with "- 1"
   cse-experiment/              dedup-off artifacts: model pair, Dockerfile
                                reproducing the C crash, counter patch script
+  argv-tests/                  the five symbolic-argv test programs (+ README)
+  btor2-rust-rotor-exit1/      Rust models under target exit code 1
+  compile.sh / compile-argv.sh helper scripts used inside the selfie image
+  eqv_combined_sweep.sh        combined equivalence sweep helper
+  parallel_results/            raw per-run outputs (exit-code-0 campaign)
+  parallel_results_exit1/      raw per-run outputs (exit-code-1 campaign)
+  parallel_runner*.sh          session-specific parallel helpers (their
+                               merged output = the committed CSVs)
   run_equivalence_check.ps1    older shallow harness (kept for reference)
 ```
 
-#### Running Benchmarks
+#### Compiling your own test programs
+
+The committed `benchmarks/binaries/*.m` cover the standard suite, so the
+Quickstart above needs no compiler. To model your **own** C\* program,
+compile it with selfie inside the container (the image's batch entrypoint
+must be bypassed):
 
 ```bash
 cd benchmarks
-
-# Build Docker images
 docker build -t selfie .
-docker build -t btormc -f Dockerfile.btormc .
 
-# Compile a C program with selfie
-docker run --rm -v "$(pwd):/work" selfie \
-  /opt/selfie/selfie -c /work/test.c -o /work/test.m
+# Compile a C program with selfie (builds selfie on first use)
+docker run --rm --entrypoint /bin/sh -v "$(pwd):/work" selfie \
+  -c "make -C /selfie selfie && /selfie/selfie -c /work/test.c -o /work/test.m"
 
-# Generate BTOR2 with Rust Rotor
-cargo run --release -- /work/test.m -o model.btor2
-
-# Verify with btormc
-docker run --rm --entrypoint /bin/bash \
-  -v "$(pwd):/work" btormc \
-  -c "btormc -kmax 100 /work/model.btor2"
+# Generate BTOR2 with Rust Rotor (host side — note the HOST path)
+cd .. && cargo run --release -- benchmarks/test.m -o model.btor2
 ```
+
+Then validate and check exactly as in Quickstart steps 3--4.
 
 ### Rust vs C Rotor: Model Comparison
 
@@ -426,7 +445,7 @@ predicate from `rotor.c` in the C output's exact emission order.
 |---|---|---|
 | **Bad-state properties** | 24 | **24** — same names, same order, same predicates |
 | **Deduplication algorithm** | linear list scan, O(N²) total | HashMap lookup, O(N) total |
-| **Dedup disabled** (supervisor's experiment) | **crashes** (`ite then sort mismatch`, exit 14) — the C generator relies on line reuse for node identity | works (`--no-cse`): models grow ~1.43× and stay catbtor-valid |
+| **Dedup disabled** (supervisor's experiment) | **crashes** (`ite then sort mismatch`, exit 14) — the C generator relies on line reuse for node identity; see [CRASH_REPORT.md](CRASH_REPORT.md) | works (`--no-cse`): models grow ~1.43× and stay catbtor-valid |
 | **Initialization encoding** | Unfolded over time steps (`zeroed-*` → `loaded-*`) | Direct `init` statements from binary data |
 
 The dedup experiment confirms the speed difference is purely the data
@@ -457,7 +476,7 @@ binary image into memory. One loaded instruction in C:
 
 The Rust file writes the same word as a ~24-character decimal `constd` with
 a short comment. Same meaning, a third of the characters. The statement
-counts (138.6k vs 110.9k, only 1.25x apart) show the *content* is nearly
+counts (138.8k vs 110.9k, only 1.25x apart) show the *content* is nearly
 identical; the byte ratio (3.4x) is comments + binary-string constants +
 longer nids. Think pretty-printed JSON with comments vs the same JSON
 minified — and the P2 equivalence results are the proof that the meaning is
@@ -488,14 +507,18 @@ The generated BTOR2 models can be verified with:
 | [dagre](https://github.com/dagrejs/dagre) | Hierarchical graph layout |
 | [cytoscape-dagre](https://github.com/cytoscape/cytoscape.js-dagre) | Cytoscape-dagre integration |
 | [cytoscape-svg](https://github.com/kinimesi/cytoscape-svg) | SVG graph export |
+| [Google Fonts](https://fonts.google.com/) (Inter, JetBrains Mono) | Typography |
 
 ### References
 
 - [Selfie project](https://github.com/cksystemsteaching/selfie) — Original C implementation
 - [BTOR2 format](https://link.springer.com/chapter/10.1007/978-3-319-96145-3_32) — BTOR2, BtorMC and Boolector 3.0
-- [Agent-BiTR](https://github.com/cksystemsgroup/agent-bitr) — Related work on agent-based bounded model checking
+- [BiTR](https://github.com/cksystemsgroup/bitr) — Related work on agent-based bounded model checking (formerly agent-bitr)
 - Diller (2022) — *Visualizing BTOR2 Models* (thesis, inspiration for visualizer features)
 
 ### License
 
-See the [selfie project](https://github.com/cksystemsteaching/selfie) for licensing details.
+This repository is licensed under the [BSD 2-Clause License](LICENSE).
+The modeled machine semantics derive from the
+[selfie project](https://github.com/cksystemsteaching/selfie), itself
+BSD-2-Clause licensed.

@@ -20,7 +20,7 @@
 \affiliation{%
   \institution{Paris Lodron University of Salzburg}
   \city{Salzburg}\country{Austria}}
-\email{jask.begic@gmail.com}
+\email{jasmin.begic@stud.plus.ac.at}
 
 \author{Daniel Wassie}
 \affiliation{%
@@ -137,7 +137,7 @@ introduced during development was caught by it.
         architectural difference in \emph{when} each tool deduplicates
         (Section~\ref{sec:performance}); we close the argument by porting
         the optimisation \emph{back into the reference C}, where it is
-        $\sim$95$\times$ faster with byte-identical output
+        $\sim$93$\times$ faster with byte-identical output
         (Section~\ref{sec:backport}).
   \item An interactive, browser-based witness visualizer
         (Section~\ref{sec:visualizer}).
@@ -247,14 +247,15 @@ compiles nothing and executes nothing; it emits a model whose initial
 state is the loaded binary with the boot stack image, whose transition
 functions encode selfie's startup code, the \texttt{malloc}/\texttt{brk}
 round trip, the stalling \texttt{read}, and the arithmetic, and whose
-property b7 is
+24 properties are boolean formulas over that state --- for instance the
+exit property reads
 \begin{lstlisting}
 40901 eq 1 20055 50 ; actual exit code ==
                     ; bad exit code?
 \end{lstlisting}
-\noindent style boolean logic over the state (here shown for the exit
-property; the division property guards the divisor of every division
-instruction in the binary). Running \texttt{btormc} on the model yields
+\noindent while the division property (b7) guards the divisor of every
+division instruction in the binary. Running \texttt{btormc} on the
+model yields
 \begin{lstlisting}
 [btor>mc] bad state property 7 reachable
           at bound k = 76 SATISFIABLE
@@ -542,11 +543,12 @@ property becomes satisfiable at bound $k{=}67$ with witness byte
 solver reaches through three pointer dereferences of the modeled stack
 image: from the stack cell at \texttt{SP{+}8} to the pointer array, to
 the string slot, to the byte the program's arithmetic actually
-inspects. The witness's opening lines are literal enough to quote:
+inspects. The relevant witness lines are literal enough to quote:
 \begin{lstlisting}
 sat
 b23
 #0
+; ... 25 initial-memory assignments ...
 3 01000011 argv[1][0]#0
 \end{lstlisting}
 \noindent --- property \texttt{b23} (the target exit code) is
@@ -916,11 +918,16 @@ naive dedup-everything & --- & --- & bad state at $k{=}0$ \\
 \end{table}
 
 The byte-identical C rotor generates selfie's model in \textbf{1.5\,s}
-instead of \textbf{139\,s} ($\sim$95$\times$), producing output that
+instead of \textbf{139\,s} ($\sim$93$\times$), producing output that
 \texttt{diff} reports identical to the baseline on all 18 benchmarks and on
 selfie (modulo the executable name in one header comment). Same source, same
 output, same compiler --- two orders of magnitude faster from one data
-structure, with the language held fixed. The dedup-everywhere variant
+structure, with the language held fixed. (All back-port timings here
+were re-measured in the same containerized environment as
+Table~\ref{tab:perf}; the companion repository additionally reports an
+independent measurement on a different machine and selfie revision,
+with the same two-orders-of-magnitude result.) The dedup-everywhere
+variant
 produces a \emph{smaller} model (selfie: 99k lines vs.\ the baseline's 139k)
 and passes the same differential criterion as Section~\ref{sec:validation}:
 \textbf{36/36} paired verdicts identical to the baseline across the 18
@@ -985,9 +992,10 @@ when it finds a bug is sound, complete, and humanly opaque:
 sat
 b23
 #0
+; ... initial-memory assignments ...
 3 01000011 argv[1][0]#0
 4 10000010 argv[1][1]#0
-; ... thousands of lines keyed to
+; ... thousands more lines keyed to
 ; internal node numbers ...
 \end{lstlisting}
 
@@ -1111,7 +1119,7 @@ modeling defect we introduced, one crash in the reference tool, and one
 bug in our own measurement harness --- and its final, fully green table
 is the precise sense in which the two generators are equivalent. The same
 methodology certified the optimisation a second time, after we carried it
-back into the reference C: there it is $\sim$95$\times$ faster with
+back into the reference C: there it is $\sim$93$\times$ faster with
 byte-identical output, which settles the cause as the data structure and
 not the language.
 
@@ -1143,9 +1151,10 @@ generator bounds the ways both can be wrong together.
 We thank Christoph M.\ Kirsch for supervision and for the profiling and
 validation methodology this paper applies, and the selfie project for
 the reference implementation and benchmark suite. Drafting and
-engineering were assisted by AI tooling (Anthropic's Claude), following
-the course's guidance; all measurements were produced by, and all
-claims are checkable against, the committed harness and artifacts.
+engineering were assisted by AI tooling (Anthropic's Claude with the
+versions Opus 4.7, 4.8 and Fable), following the course's guidance;
+all measurements were produced by, and all claims are checkable
+against, the committed harness and artifacts.
 \end{acks}
 
 \appendix
