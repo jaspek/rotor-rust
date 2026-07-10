@@ -24,7 +24,9 @@ three things on top of the C reference:
   approximated.
 - **Symbolic command-line arguments** (`--symbolic-argv`) — argv bytes
   become part of the solver's search space, so bugs that depend on what a
-  user types on the command line become findable.
+  user types on the command line become findable. Working and validated on
+  five test programs; the design (fixed argument count, fixed-size slots)
+  is still being rethought.
 - **A browser-based witness visualizer**
   ([try it online](https://jaspek.github.io/rotor-rust/)) — replays the
   solver's counterexample step by step, from input byte to fired property.
@@ -134,6 +136,11 @@ docker run --rm -v "$PWD:/w" btormc -c "btormc -kmax 100 /w/argv.btor2" | head -
 | `test3_length_dependent.c` | the argument's *length* |
 | `test4_multi_arg.c` | two different arguments simultaneously |
 | `test5_checksum.c` | an arithmetic relation over the input bytes |
+
+> **Status:** the mechanism is functional and machine-validated, but its
+> design is still being rethought — the fixed-slot layout and the
+> generation-time argument count may change in a future revision (these
+> are also the first two extensions named in the paper's conclusions).
 
 Without `--symbolic-argv` the stack is booted with a CONCRETE argv image
 (argc=1, argv[0]=program name) exactly like the C reference boot loader —
@@ -263,7 +270,7 @@ A witness for any model can be produced with
 | Part | Scope | Status |
 |------|-------|:------:|
 | 1 | Rust rewrite of the translator | **Complete — verified equivalent on all 18 standard benchmarks under TWO configurations (36/36 paired verdicts)**: same 24 bad-state properties as the C reference by name, index, and ported predicate; btormc fires the **same property at the same least bound k** from both rotors' models on every benchmark at kmax=1500, for target exit code 0 and 1 alike. Selfie self-model generates in ~0.1 s / 20 MB (vs 139 s / 428 MB for C, binary-only). Evidence: [docs/VERIFICATION.md](docs/VERIFICATION.md), `benchmarks/deep_equivalence_results*.csv`. |
-| 2 | Symbolic argv support | **Complete** — 5 benchmark programs, each with a bug reachable *only* via argv, are discovered by btormc within seconds. |
+| 2 | Symbolic argv support | **Working, design under revision** — 5 benchmark programs, each with a bug reachable *only* via argv, are discovered by btormc within seconds. The mechanism is validated; the layout (generation-time argument count, fixed-size argument slots) is still being rethought toward symbolic argument count and packed string layouts. |
 | 3 | Witness-trace visualizer | **Complete** — example picker (12 examples), witness playback with timeline scrubber, drag & drop loading, keyboard shortcuts, full symbolic-input display; [live online](https://jaspek.github.io/rotor-rust/). |
 
 Deliverables (slides, reports, and the full course paper) are published on
