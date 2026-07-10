@@ -311,10 +311,19 @@ nodes ≈ 20 MB.
 The output *files* differ in size while encoding the same content — the
 difference is comments (50.8% of the C file vs 5.0%), binary-string vs
 decimal constants, and node-id width; the decomposition is in
-[docs/VERIFICATION.md](docs/VERIFICATION.md). The hash-consing
-optimisation was also ported back into the reference C with byte-identical
-output (139 s → 1.5 s, ~93×): see
-[rotor-c-hashcons](https://github.com/jaspek/rotor-c-hashcons).
+[docs/VERIFICATION.md](docs/VERIFICATION.md).
+
+**The back-port.** The cleanest test that the speed-up is the data
+structure and not the language: the same hash-consing transformation
+applied to the reference's own `tools/rotor.c` as a ~70-line patch, in two
+variants — full source, unified diffs, and measurements in the companion
+repository [rotor-c-hashcons](https://github.com/jaspek/rotor-c-hashcons):
+
+| Variant (all C) | Time | Model lines | Validated by |
+|---|---:|---:|---|
+| reference baseline | 139 s | 138,820 | — |
+| hash-consed, byte-identical | **1.5 s** (~93×) | 138,820 | `diff`: all 18 benchmark outputs + selfie byte-identical |
+| hash-consed, dedup-everywhere | 1.5 s | 99,729 | 36/36 paired btormc verdicts, identical to baseline |
 
 ### Equivalence
 
