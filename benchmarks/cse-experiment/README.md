@@ -30,7 +30,7 @@ difference in what gets deduplicated.
 - `patch_c_counters.py` - not part of this experiment, it patches the
   profiling counters into `/selfie/tools/rotor.c` (and restores `reuse_lines = 1`,
    which the CSE-off build above leaves at 0). Used by the profiling
-  run written up in `../../PROFILING_RESULTS.md`.
+  run written up in `../../docs/VERIFICATION.md`.
 
 ## Reproduce
 
