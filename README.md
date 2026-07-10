@@ -274,7 +274,7 @@ A witness for any model can be produced with
 | 3 | Witness-trace visualizer | **Complete** — example picker (12 examples), witness playback with timeline scrubber, drag & drop loading, keyboard shortcuts, full symbolic-input display; [live online](https://jaspek.github.io/rotor-rust/). |
 
 Deliverables (slides, reports, and the full course paper) are published on
-the [GitHub releases page](../../releases) so the repository stays free of
+the [GitHub releases page](https://github.com/jaspek/rotor-rust/releases) so the repository stays free of
 large binary artefacts.
 
 ### Performance
@@ -288,7 +288,7 @@ working set:
 
 | Metric | C Rotor (reference) | Rust Rotor | Ratio |
 |---|---:|---:|---:|
-| Wall-clock model generation | 139 s | **0.06–0.14 s** | ~1,000–2,000× faster |
+| Wall-clock model generation | 139 s | **0.06–0.14 s** | ~1,000–2,300× faster |
 | Peak memory | 428 MB | **20 MB** | ~21× less |
 | Internal formula lines created | 3,165,611 | ~111k (duplicates never created) | 28× |
 | Output BTOR2 size | 10.6 MB | **3.1 MB** | 3.4× smaller |
@@ -299,8 +299,8 @@ working set:
 plain counters in BOTH tools (full data:
 [docs/VERIFICATION.md](docs/VERIFICATION.md)). C answers it by
 walking a linear list: **11,695,232,963 comparisons** for just 9,976
-questions (~1.17M comparisons each; reuse is deliberately disabled in its
-hot loading path because the question is so expensive). The Rust rotor asks
+questions (~1.17M comparisons each; the reference runs its hot loading
+path with reuse off). The Rust rotor asks
 the question on every creation — 159,018 times — at **one hash probe each**.
 11.7 billion comparisons at nanosecond scale ≈ 100+ s, matching the
 measured 139 s wall time. Counters are self-consistent on both sides
@@ -342,8 +342,9 @@ the **same bad-state property index** to fire at the **same least bound k**
 **Final result: 18/18 benchmarks equivalent under BOTH tested
 configurations (target exit code 0 and 1) — 36/36 paired verdicts, zero
 divergences.** Under target 1, five planted bugs fire at k = 91..107 with
-identical k in both rotors, and return-from-loop FLIPS from UNSAT to SAT@95
-— identically in both. Full tables, methodology, and the raw CSVs:
+identical k in both rotors — among them return-from-loop, which FLIPS from
+UNSAT (target 0) to SAT@95 (target 1), identically in both. Full tables,
+methodology, and the raw CSVs:
 [docs/VERIFICATION.md](docs/VERIFICATION.md),
 `benchmarks/deep_equivalence_results*.csv`.
 
@@ -444,6 +445,8 @@ benchmarks/
   deep_equivalence_results.csv         final 18/18 table (exit code 0)
   deep_equivalence_results_exit1.csv   final 18/18 table (exit code 1)
   btor2-c-rotor-exit1/         C reference models regenerated with "- 1"
+                               (stock rotor; built as /rotor-cse-on by
+                               cse-experiment/Dockerfile.cse)
   cse-experiment/              dedup-off artifacts: model pair, Dockerfile
                                reproducing the C crash, counter patch script
   argv-tests/                  the five symbolic-argv test programs (+ README)

@@ -2,6 +2,9 @@
 name = "rotor"
 version = "0.1.0"
 edition = "2024"
+license = "BSD-2-Clause"
+description = "BTOR2 model generator for RISC-V binaries (Rust reimplementation of selfie's rotor)"
+repository = "https://github.com/jaspek/rotor-rust"
 
 [dependencies]
 goblin = "0.9"

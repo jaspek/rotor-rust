@@ -47,8 +47,8 @@ Results (from benchmarks/deep_equivalence_results.csv) — **FINAL: 18/18**:
 | three-level-nested-loop-fail-1-35 | bad-exit-code @ 103 | bad-exit-code @ 103 | YES |
 | two-level-nested-loop-1-35 | bad-exit-code @ 99 | bad-exit-code @ 99 | YES |
 
-Five distinct property types fire (division, store-invalid, load-seg-fault,
-bad-exit-code, plus two agreed-UNSAT rows); the recursion benchmarks match
+Four distinct property types fire (division, store-invalid, load-seg-fault,
+bad-exit-code), plus two agreed-UNSAT rows; the recursion benchmarks match
 step-exactly through hundreds of instructions of nested call frames.
 
 ### Second configuration: target exit code 1
@@ -105,7 +105,11 @@ Baseline C run for reference (reuse ON, selfie.c, same container):
 wall 2:02.8, peak memory 432 MB, model 138,820 lines (10.6 MB),
 "3,165,611 lines of model formulae generated" before reuse/pruning.
 (This run includes selfie compiling itself via `-c`; the apples-to-apples
-binary-only figures are 139 s / 428 MB — see Part B below.)
+binary-only figures are 139 s / 428 MB — see Part B below. The two timings
+come from separate sessions, so they are not directly comparable:
+Wall-clock varies with container load between runs, which is why this
+compilation-inclusive session happened to finish below the canonical
+binary-only figure.)
 
 **Rust rotor (`--no-cse` flag).** Models grow but stay correct, because
 every node carries its sort as an explicit parameter — branch
@@ -184,10 +188,10 @@ internally consistent.
 **1. The ballparks do NOT match — the sharing IS different.**
 Differing ballparks alone already establish that the two tools share
 subexpressions differently. The C rotor asks the dedup question only 9,976
-times out of 3.17M creations — reuse is deliberately switched off in the
-hot (loading) regions precisely because each question is so expensive. The
-Rust rotor asks it on every single creation, because each question costs
-one hash probe.
+times out of 3.17M creations — its hot (loading) regions run with reuse
+off, where each question would cost ~1.17M list comparisons. The Rust
+rotor asks it on every single creation, because each question costs one
+hash probe.
 
 **2. The cost per question explains the entire wall-time difference.**
 C spends 11.7 *billion* list comparisons to answer ~10k questions

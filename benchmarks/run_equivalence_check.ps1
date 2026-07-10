@@ -9,7 +9,7 @@
 # Settings matched to C Rotor defaults (see C-Rotor header in any .btor2):
 #   bytes-to-read 1, heap 2048, stack 2048, vaddr 32-bit.
 #
-# Run from C:\Users\jasko\Programming\Rust\Project01\benchmarks  with:
+# Run from the benchmarks/ directory with:
 #   .\run_equivalence_check.ps1
 
 $ErrorActionPreference = "Stop"
@@ -19,7 +19,8 @@ $Bins      = Join-Path $HereDir "binaries"
 $CRotor    = Join-Path $HereDir "btor2-c-rotor"
 $RustOut   = Join-Path $HereDir "btor2-rust-rotor"
 $Witness   = Join-Path $HereDir "btormc-witnesses"
-$Rotor     = "C:\Users\jasko\Programming\Rust\Project01\target\release\rotor.exe"
+$RotorName = if ($env:OS -eq "Windows_NT") { "rotor.exe" } else { "rotor" }
+$Rotor     = Join-Path (Split-Path $HereDir) "target/release/$RotorName"
 $BtormcImg = "btormc:latest"
 
 if (Test-Path $RustOut) { Remove-Item $RustOut -Recurse -Force }

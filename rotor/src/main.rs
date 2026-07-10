@@ -56,7 +56,7 @@ struct Cli {
     #[arg(long, default_value_t = 4)]
     bytes_to_read: u64,
 
-    /// Check for bad exit code (exit != 0)
+    /// Check for bad exit code (exit == target exit code, see --exit-code)
     #[arg(long, default_value_t = true)]
     check_bad_exit: bool,
 

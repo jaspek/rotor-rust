@@ -1,6 +1,6 @@
 // Test 4: Bug requires TWO specific arguments: argv[1][0] == 88 ('X') AND argv[2][0] == 89 ('Y').
 // Written in C* (selfie subset): only uint64_t types, pointer arithmetic.
-// Tests multi-argument symbolic reasoning (requires --symbolic-argc 2).
+// Tests multi-argument symbolic reasoning (requires --num-symbolic-args 2).
 // Compile: selfie -c test4_multi_arg.c -m 1
 // Rotor:   rotor test4_multi_arg.m --symbolic-argv --num-symbolic-args 2 --max-arglen 8 --exit-code 1
 

@@ -15,9 +15,10 @@ so byte extraction is done with division/modulo arithmetic.
 | 4 | `test4_multi_arg.c` | `argv[1][0] == 88 && argv[2][0] == 89` (`'X'`,`'Y'`) | bytes in TWO different arguments simultaneously |
 | 5 | `test5_checksum.c` | `argv[1][0] + argv[1][1] == 200` | an arithmetic relation between bytes |
 
-None of these programs read stdin, so none of these bugs are reachable with
-the original rotor's stdin-only symbolic input — that is the capability gap
-symbolic argv closes.
+None of these programs read stdin, so none of these bugs are reachable
+through standard-input exploration alone — symbolic argv adds the input
+channel these bugs depend on (the rotor paper lists symbolic console
+arguments as future work).
 
 Verified example (test1): btormc reports `bad-exit-code` SATISFIABLE at
 k = 67 with witness byte `argv[1][0] = 01000011` (= 0x43 = `'C'`).
