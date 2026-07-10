@@ -330,8 +330,6 @@ benchmarks/
   eqv_combined_sweep.sh        combined equivalence sweep helper
   parallel_results/            raw per-run outputs (exit-code-0 campaign)
   parallel_results_exit1/      raw per-run outputs (exit-code-1 campaign)
-  parallel_runner*.sh          session-specific parallel helpers (their
-                               merged output = the committed CSVs)
   run_equivalence_check.ps1    older shallow harness (kept for reference)
 ```
 
@@ -402,7 +400,7 @@ evaluates the initial state. This proves well-formedness only — the
 
 #### Property-level equivalence (deep check: same property, same least-k)
 
-The strong test (see `EQUIVALENCE_PLAN.md`): run `btormc -kmax 1500` on both
+The strong test: run `btormc -kmax 1500` on both
 rotors' models of the same binary and require the **same bad-state property
 index** to fire at the **same least bound k**. **FINAL RESULT: 18/18
 benchmarks equivalent — under BOTH tested configurations (target exit code
