@@ -31,19 +31,17 @@ three things on top of the C reference:
 
 ---
 
-## Problem
+## Motivation
 
-Formal verification of low-level software relies on tools that translate a compiled program into a mathematical model, which a solver can then check against safety properties up to a bounded execution depth. In practice, three obstacles make this workflow hard to use.
+Formal verification of low-level software relies on tools that translate a compiled program into a mathematical model, which a solver can then check against safety properties up to a bounded execution depth. This project takes up three aspects of that workflow: generation speed, the model's input surface, and how the result is presented.
 
-First, the existing translator for RISC-V binaries is a large, monolithic C program — difficult to read, extend, or reason about, and awkward to integrate with modern toolchains. Second, the generated models only let a solver explore inputs the program reads from standard input; bugs that depend on **command-line arguments** are structurally unreachable, even though a real operating system would expose those bytes to the program. Third, when the solver does find a counterexample, its output is a flat textual trace that is effectively unreadable without intimate knowledge of the model format — the result, however correct, is inaccessible to anyone who did not build the tool.
+First, **generation speed**: model generation cost grows with the size of the binary — on selfie's self-compilation, a model takes about two minutes to generate — and a faster generator makes regenerate-after-every-change workflows cheap. Second, **the input surface**: the generated models let a solver explore the bytes a program reads from standard input; **command-line arguments** are a further input channel a real operating system provides, and the rotor paper itself lists symbolic console arguments as future work. Third, **the result**: a model checker's counterexample witness is a compact text format keyed to internal node numbers, made for tools to consume — which leaves room for a viewer that presents the same information visually.
 
-Taken together, these three obstacles limit who can use bounded model checking on real binaries, what bugs it can find, and what a user can do with the answer once they have it.
+The project addresses these three points in three parts:
 
-The three obstacles are addressed in three parts:
-
-1. **The translator is re-implemented in Rust**, replacing the monolithic C codebase with a modular crate that is easier to maintain, extend, and audit.
-2. **The generated model is extended so that command-line arguments can be left symbolic**, letting the solver search over them instead of over stdin alone.
-3. **A browser-based visualizer** takes the solver's counterexample and shows, step by step, which instruction fires and which memory or register state changes — so the verification result becomes something a non-expert can actually read.
+1. **The translator is re-implemented in Rust** as a library crate organised one module per concern.
+2. **The generated model is extended so that command-line arguments can be left symbolic**, letting the solver search over them in addition to stdin.
+3. **A browser-based visualizer** takes the solver's counterexample and shows, step by step, which instruction fires and which memory or register state changes — so the verification result becomes something a non-expert can follow.
 
 Code for each part lives in its own subdirectory: `rotor/`,
 `benchmarks/argv-tests/`, and `visualizer/`.

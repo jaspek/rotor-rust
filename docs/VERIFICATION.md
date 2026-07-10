@@ -123,8 +123,9 @@ dedup matters most in the instruction-semantics logic.
 **Conclusion.** Dedup is semantically neutral in the Rust implementation
 (verified: same btormc verdict with and without). The speed difference
 between the rotors is the data structure (HashMap O(1) vs list walk O(N)
-per lookup), not the amount of dedup performed: C rotor cannot even run
-with reuse globally off, while Rust rotor runs fine either way.
+per lookup), not the amount of dedup performed: the C rotor requires line
+reuse to be enabled (its sort checks build on the pointer invariant that
+reuse maintains), while the Rust rotor runs either way.
 
 ### Reproducers
 
@@ -346,5 +347,5 @@ valid model.
 The crash was encountered during a comparison experiment in which the
 duplicate check is disabled in both rotors and the outputs compared. The
 Rust rotor with `--no-cse` produces a 1.43x larger model that catbtor
-accepts and btormc gives identical verdicts on; the C rotor cannot complete
-the same experiment because of this crash.
+accepts and btormc gives identical verdicts on; on the C side the same
+experiment stops at this crash, hence this report.
