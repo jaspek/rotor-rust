@@ -162,7 +162,7 @@ timing is then reasoned about from the counts.
 Both instrumented builds run on the same input: selfie.m (43,406
 instructions), 64-bit, 1 input byte, heap/stack 2048.
 
-### The counters (measured 2026-06-11)
+### The measured counters
 
 | Counter | C rotor | Rust rotor |
 |---|---:|---:|

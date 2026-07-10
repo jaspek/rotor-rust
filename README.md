@@ -272,11 +272,12 @@ large binary artefacts.
 
 ### Performance
 
-Re-measured 2026-06-10, strictly apples-to-apples: both rotors consume the
-**pre-compiled selfie.m binary** (selfie compiled into a RISC-U binary of
-itself, ~43k instructions; C: `rotor -m64 -l selfie.m - 0` under
-`/usr/bin/time -v` in the container; Rust: 3 runs, wall clock + polled peak
-working set):
+Both rotors were measured on the same input — the **pre-compiled selfie.m
+binary** (selfie compiled into a RISC-U binary of itself, ~43k
+instructions) — so compilation cost is excluded on both sides. The C rotor
+ran as `rotor -m64 -l selfie.m - 0` under `/usr/bin/time -v` in the
+container; the Rust rotor over three runs, wall clock plus polled peak
+working set:
 
 | Metric | C Rotor (reference) | Rust Rotor | Ratio |
 |---|---:|---:|---:|
