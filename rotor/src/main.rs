@@ -64,10 +64,6 @@ struct Cli {
     #[arg(long)]
     check_good_exit: bool,
 
-    /// Check for any exit
-    #[arg(long)]
-    check_exit: bool,
-
     /// Check for division by zero
     #[arg(long, default_value_t = true)]
     check_div_zero: bool,
@@ -108,7 +104,8 @@ struct Cli {
     #[arg(long, default_value_t = 8)]
     max_arglen: usize,
 
-    /// Code synthesis mode (no binary needed)
+    /// Code synthesis mode — EXPERIMENTAL stub (the code segment is not
+    /// yet symbolic; the generated model is a placeholder)
     #[arg(long)]
     synthesis: bool,
 
@@ -130,10 +127,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         xlen: cli.xlen,
         enable_m: cli.enable_m,
         enable_c: cli.enable_c,
-        riscu_only: false,
         num_cores: cli.cores,
         virtual_address_space: cli.vaddr_bits,
-        code_word_size: 32,
         heap_allowance: cli.heap,
         stack_allowance: cli.stack,
         bytes_to_read: cli.bytes_to_read,
@@ -142,14 +137,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         max_arglen: cli.max_arglen,
         check_bad_exit_code: cli.check_bad_exit,
         check_good_exit_code: cli.check_good_exit,
-        check_exit_codes: cli.check_exit,
         check_division_by_zero: cli.check_div_zero,
         check_division_overflow: true,
         check_invalid_addresses: cli.check_invalid_addresses,
         check_seg_faults: cli.check_seg_faults,
         target_exit_code: cli.exit_code,
         print_comments: cli.comments && !cli.no_comments,
-        propagate_constants: true,
         enable_cse: !cli.no_cse,
     };
 

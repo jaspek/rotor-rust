@@ -28,17 +28,14 @@ pub struct Config {
     pub xlen: Xlen,
     pub enable_m: bool,
     pub enable_c: bool,
-    pub riscu_only: bool,
     pub num_cores: usize,
     pub virtual_address_space: u32,
-    pub code_word_size: u32,
     pub heap_allowance: u64,
     pub stack_allowance: u64,
     pub bytes_to_read: u64,
     // property checks
     pub check_bad_exit_code: bool,
     pub check_good_exit_code: bool,
-    pub check_exit_codes: bool,
     pub check_division_by_zero: bool,
     pub check_division_overflow: bool,
     pub check_invalid_addresses: bool,
@@ -53,7 +50,6 @@ pub struct Config {
 
     // output
     pub print_comments: bool,
-    pub propagate_constants: bool,
     /// Common-subexpression elimination (HashMap dedup). Disable to compare
     /// with C rotor's reuse_lines = 0 (the professor's experiment).
     pub enable_cse: bool,
@@ -65,10 +61,8 @@ impl Default for Config {
             xlen: Xlen::X64,
             enable_m: true,
             enable_c: true,
-            riscu_only: false,
             num_cores: 1,
             virtual_address_space: 32,
-            code_word_size: 32,
             heap_allowance: 4096,
             stack_allowance: 4096,
             bytes_to_read: 4,
@@ -77,14 +71,12 @@ impl Default for Config {
             max_arglen: 8,
             check_bad_exit_code: true,
             check_good_exit_code: false,
-            check_exit_codes: false,
             check_division_by_zero: true,
             check_division_overflow: true,
             check_invalid_addresses: true,
             check_seg_faults: true,
             target_exit_code: 0,
             print_comments: true,
-            propagate_constants: true,
             enable_cse: true,
         }
     }

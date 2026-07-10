@@ -64,8 +64,16 @@ pub fn load_elf(path: &Path) -> Result<LoadedBinary, ElfError> {
             let memsz = ph.p_memsz as usize;
             let vaddr = ph.p_vaddr;
 
+            // Overflow-safe bounds check (offset + filesz can wrap in
+            // release builds on a malformed header), and cap the BSS-driven
+            // allocation so a corrupt p_memsz cannot demand gigabytes.
+            const MAX_BSS: usize = 64 * 1024 * 1024;
+            let in_bounds = offset
+                .checked_add(filesz)
+                .is_some_and(|end| end <= bytes.len());
+            let memsz = memsz.min(filesz.saturating_add(MAX_BSS));
             let mut segment_data = Vec::with_capacity(memsz);
-            if offset + filesz <= bytes.len() {
+            if in_bounds {
                 segment_data.extend_from_slice(&bytes[offset..offset + filesz]);
             }
             // Zero-fill remaining (BSS)

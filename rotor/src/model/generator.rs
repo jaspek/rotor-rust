@@ -94,7 +94,11 @@ pub fn model_rotor_synthesis(
     let empty_binary = LoadedBinary {
         name: "synthesis".to_string(),
         entry_point: 0,
-        code: vec![0; 4], // single NOP
+        // NOTE: 0x00000000 is RISC-V's reserved ILLEGAL instruction (the
+        // canonical NOP is 0x00000013), so this placeholder model trips the
+        // known-instructions bad state on its first fetch. Kept as an
+        // explicit stub until synthesis makes the code segment symbolic.
+        code: vec![0; 4],
         code_start: 0,
         code_size: 4,
         data: vec![],
