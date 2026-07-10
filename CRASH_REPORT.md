@@ -1,8 +1,7 @@
 # Crash report: rotor aborts with "ite then sort mismatch error" when reuse_lines = 0
 
-Complete reproduction, as requested in the 2026-06-11 meeting
-("when you have a crash of my stuff then just send me something so I can
-reproduce it ... it has to be complete").
+A complete, self-contained reproduction of a crash in the reference rotor
+(upstream selfie, `tools/rotor.c`) that occurs when line reuse is disabled.
 
 ## Summary
 
@@ -78,9 +77,10 @@ valid model.
   handful of distinct sorts; a dedicated small registry keeps the pointer
   invariant for sorts while letting everything else duplicate).
 
-## Why we hit this
+## Context
 
-Your suggested experiment: disable the duplicate check in both rotors and
-compare. The Rust rotor with `--no-cse` produces a 1.43x larger model that
-catbtor accepts and btormc gives identical verdicts on; the C rotor cannot
-complete the same experiment because of this crash.
+The crash was encountered during a comparison experiment in which the
+duplicate check is disabled in both rotors and the outputs compared. The
+Rust rotor with `--no-cse` produces a 1.43x larger model that catbtor
+accepts and btormc gives identical verdicts on; the C rotor cannot complete
+the same experiment because of this crash.

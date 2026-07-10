@@ -1,9 +1,10 @@
-# Profiling the speed difference by counting (the prescribed methodology)
+# Profiling the speed difference by counting
 
-Method from the 2026-06-11 meeting: define the basic operation — the
-question *"is this subexpression already in the system?"* — find the code
-location answering it in both tools, count invocations and hits with plain
-integer counters, check the ballparks, then reason about timing.
+Method (counter-based profiling): the basic operation — the question
+*"is this subexpression already in the system?"* — is defined, the code
+location answering it is identified in both tools, invocations and hits are
+counted with plain integer counters, the ballparks are compared, and the
+timing is then reasoned about from the counts.
 
 ## Instrumentation points
 
@@ -26,7 +27,8 @@ instructions), 64-bit, 1 input byte, heap/stack 2048.
 | basic operations spent answering | **11,695,232,963** list comparisons | **159,018** hash probes |
 | unique lines/nodes in the output | 138,820 (written; unreachable pruned at print) | 110,904 |
 
-Self-consistency check (the "conjecture on what the counter should be"):
+Self-consistency check (each counter is checked against a value the tool
+already reports):
 C: 3,171,632 calls − 6,021 reuses = 3,165,611 = exactly the "lines of model
 formulae generated" the tool itself reports. Rust: 159,018 lookups − 48,114
 hits = 110,904 = exactly the unique node count. Both tools' counters are
@@ -35,8 +37,8 @@ internally consistent.
 ## Findings
 
 **1. The ballparks do NOT match — the sharing IS different.**
-Exactly the branch the methodology anticipates ("if they are not in the
-same ballpark then you already know the sharing is different"). The C rotor
+Differing ballparks alone already establish that the two tools share
+subexpressions differently. The C rotor
 asks the dedup question only 9,976 times out of 3.17M creations — reuse is
 deliberately switched off in the hot (loading) regions precisely because
 each question is so expensive. The Rust rotor asks it on every single
@@ -62,7 +64,7 @@ creations. This is also the memory story: 3.17M records ≈ 428 MB peak vs
 configurations (see P2_RESULTS.md). The dedup strategy affects file size
 and speed, never meaning (confirmed independently by the --no-cse runs).
 
-## Comment-stripped size comparison (also requested)
+## Comment-stripped size comparison
 
 Generated with `-nocomments` (C, placed after `- 0`) and `--no-comments`
 (Rust, flag added for this experiment):

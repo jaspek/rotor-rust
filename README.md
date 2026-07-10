@@ -17,11 +17,11 @@ Taken together, these three obstacles limit who can use bounded model checking o
 
 ## Approach
 
-We address the three obstacles in three parts:
+The three obstacles are addressed in three parts:
 
-1. We **re-implement the translator in Rust**, replacing the monolithic C codebase with a modular crate that is easier to maintain, extend, and audit.
-2. We **extend the generated model so that command-line arguments can be left symbolic**, letting the solver search over them instead of over stdin alone.
-3. We **build a browser-based visualizer** that takes the solver's counterexample and shows, step by step, which instruction fires and which memory or register state changes — so the verification result becomes something a non-expert can actually read.
+1. **The translator is re-implemented in Rust**, replacing the monolithic C codebase with a modular crate that is easier to maintain, extend, and audit.
+2. **The generated model is extended so that command-line arguments can be left symbolic**, letting the solver search over them instead of over stdin alone.
+3. **A browser-based visualizer** takes the solver's counterexample and shows, step by step, which instruction fires and which memory or register state changes — so the verification result becomes something a non-expert can actually read.
 
 ## Status
 
@@ -373,8 +373,8 @@ working set):
 | Output BTOR2 size | 10.6 MB | **3.1 MB** | 3.4× smaller |
 | btormc validation (`catbtor` + `-kmax 0`) | PASS | **PASS** | — |
 
-**Why is it so much faster? (measured, not estimated)** We instrumented the
-dedup question — *"is this subexpression already in the system?"* — with
+**Why is it so much faster? (measured, not estimated)** The dedup question
+— *"is this subexpression already in the system?"* — was instrumented with
 plain counters in BOTH tools (full data: `PROFILING_RESULTS.md`). C answers
 it by walking a linear list: **11,695,232,963 comparisons** for just 9,976
 questions (~1.17M comparisons each; reuse is deliberately disabled in its

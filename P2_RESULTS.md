@@ -1,15 +1,15 @@
 # P2 results: deep equivalence + the CSE-off experiment
 
-## Part 1 — The professor's CSE-off experiment ("see if the universe ends")
+## Part 1 — The CSE-off experiment (duplicate check disabled in both rotors)
 
-Asked in the 2026-05-26 meeting: *"In C rotor you disable the duplicate
-check, and in your tool as well. And then you see what comes up. Just
-disable it and see if the universe ends or not."*
+Experiment: the duplicate check is disabled in both rotors, the models are
+regenerated, and the outputs are compared for well-formedness and
+model-checking behaviour.
 
 ### C rotor (reuse_lines = 0, set globally, rebuilt from source)
 
-**The universe ends.** C rotor with the duplicate check disabled globally
-**crashes** while modeling selfie:
+With the duplicate check disabled globally, the C rotor **crashes** while
+modeling selfie:
 
 ```
 /rotor-cse-off: ite then sort mismatch error
@@ -30,7 +30,7 @@ binary-only figures are 139 s / 428 MB — see README / PROFILING_RESULTS.md.)
 
 ### Rust rotor (--no-cse flag)
 
-**The universe survives.** Models grow but stay correct, because every node
+Models grow but stay correct, because every node
 carries its sort as an explicit parameter — branch sort-consistency does not
 depend on deduplication:
 
@@ -43,7 +43,7 @@ The modest 1.43x growth confirms the C-side observation that the bulk of a
 binary-initialized model (the init chains) has little reuse to exploit; the
 dedup matters most in the instruction-semantics logic.
 
-### Conclusion for the meeting
+### Conclusion
 
 Dedup is semantically neutral in the Rust implementation (verified: same
 btormc verdict with and without). The speed difference between the rotors is
@@ -100,8 +100,8 @@ and all UNSAT rows were re-verified with completion evidence.
 
 ## Part 3 — Second configuration: target exit code 1 (paper's planted bugs)
 
-The rotor paper's experiments hunt "non-zero exit code" bad states. We
-re-ran the entire suite with both rotors at target exit code 1 (C:
+The rotor paper's experiments hunt "non-zero exit code" bad states. The
+entire suite was re-run with both rotors at target exit code 1 (C:
 `rotor -m64 -c <prog>.c - 1`; Rust: `--exit-code 1`), all other parameters
 unchanged. Result: **18/18 again** (deep_equivalence_results_exit1.csv).
 
