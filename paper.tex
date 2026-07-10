@@ -12,6 +12,12 @@
   columns=fullflexible,
   keepspaces=true,
 }
+% Keep each listing's frame in one piece: wrapping the environment in a
+% minipage forbids column/page breaks inside the box, which would
+% otherwise strand part of the frame at the top of the next column.
+\usepackage{etoolbox}
+\BeforeBeginEnvironment{lstlisting}{\par\noindent\begin{minipage}{\linewidth}}
+\AfterEndEnvironment{lstlisting}{\end{minipage}\par}
 
 \title{Rotor in Rust: Fast Generation of RISC-V Machine Models
        with Symbolic Console Arguments}

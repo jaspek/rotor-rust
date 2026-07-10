@@ -69,6 +69,8 @@ benchmarks/eqv-results/
 benchmarks/*-rotorized.btor2
 benchmarks/binaries/*-rotorized.btor2
 Rotor_Paper.pdf
+RotorPaper_Begic_Wassie.pdf
+Rotor_Presentation_BegicWassie.pdf
 rotor.md
 model.btor2
 model.wit
