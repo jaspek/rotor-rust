@@ -127,8 +127,8 @@ jobs:
         run: |
           set -o pipefail
           echo "Simulating counter-with-input with witness trace..."
-          btorsim -b visualizer/examples/counter-with-input.btor2 \
-                     visualizer/examples/counter-with-input.wit 2>&1 | tail -5
+          btorsim visualizer/examples/counter-with-input.btor2 \
+                  visualizer/examples/counter-with-input.wit 2>&1 | tail -5
           echo "Simulation completed successfully"
 
   visualizer-lint:
